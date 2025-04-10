@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Feelcv</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h2>Fill info with AI</h2>
+  <input type="file" id="resume-upload" accept=".pdf,.docx,.txt">
+  <div class="buttons">
+    <button id="parse-resume">Upload/Update</button>
+    <button id="delete-resume" class="danger">Delete</button>
+  </div>
+  <div id="status"></div>
+  <pre id="output"></pre>
+  <script src="popup.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+</body>
+</html>
