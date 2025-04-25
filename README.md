@@ -25,7 +25,7 @@ An intelligent browser extension that automates the process of parsing your resu
 1. Clone this repository:
    ```bash
    git clone https://github.com/yourusername/job-assistant-extension.git
-2. Add your OpenAI API key to the script or use secure storage (chrome.storage.local).
+2. Add your own OpenAI API key to the script. Your key should be add in popup.js assigning it to the variable named "OPENAI_API_KEY".
 
 3. Load the extension:
 
