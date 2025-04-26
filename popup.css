@@ -1,13 +1,17 @@
 body {
+    width: 250px;   /* adjusted the length of the extension preview */
+    min-height: 100px;
     background-color: #313131;
     color: #ffffff;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     padding: 1rem;
-    max-width: 400px;
+    box-sizing: border-box; /* hoping the padding works nicely */
   }
   h2 {
-    font-size: 1rem;
+    font-style: italic;
+    color: #fdb14c;
+    font-size: 2rem;
     margin-bottom: 0.5rem;
   }
   input[type=file] {
@@ -47,6 +51,7 @@ body {
     max-height: 200px;
     overflow-y: auto;
     font-size: 0.75rem;
+    margin-top: 0.5rem;
   }
   /*.spinner {
     border: 4px solid rgba(255, 255, 255, 0.1);
