@@ -19,6 +19,8 @@ An intelligent browser extension that automates the process of parsing your resu
   Clean, responsive popup interface with real-time feedback and status indicators.
 
 ---
+## Preview 
+![here](preview.png)
 
 ## Installation
 
