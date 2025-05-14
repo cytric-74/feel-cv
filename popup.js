@@ -31,7 +31,7 @@ async function callOpenAI(prompt, isJobSite = false) {
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    // Add delay to prevent rate limiting (min 1 second between requests)
+    // adding delay to prevent rate limiting (minimum of 1 second between requests)
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -51,11 +51,11 @@ async function callOpenAI(prompt, isJobSite = false) {
           },
           { 
             role: "user", 
-            content: prompt.slice(0, 3000) // Reduced to 3000 chars for token safety
+            content: prompt.slice(0, 3000) // reduction of character for token safety
           }
         ],
         temperature: 0.3,
-        response_format: isJobSite ? undefined : { type: "json_object" } // Enforce JSON when needed
+        response_format: isJobSite ? undefined : { type: "json_object" } // enforce JSON when in need
       }),
       signal: controller.signal
     });
@@ -63,7 +63,7 @@ async function callOpenAI(prompt, isJobSite = false) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      // Try to get error details from response
+      // trying to get error details from response
       const errorData = await response.json().catch(() => ({}));
       const errorMessage = errorData.error?.message || 'Unknown error';
       throw new Error(`OpenAI API Error: ${response.status} - ${errorMessage}`);
@@ -76,7 +76,7 @@ async function callOpenAI(prompt, isJobSite = false) {
       throw new Error("No content in OpenAI response");
     }
 
-    // For non-JobSite responses, verify JSON is valid
+    // non-JobSite responses, verifying JSON is valid
     if (!isJobSite) {
       try {
         JSON.parse(content);
@@ -90,7 +90,7 @@ async function callOpenAI(prompt, isJobSite = false) {
     clearTimeout(timeoutId);
     console.error("OpenAI API error:", error);
     
-    // Return structured error object
+    // returns structured error object
     return { 
       error: true,
       message: error.message,
@@ -102,9 +102,9 @@ async function callOpenAI(prompt, isJobSite = false) {
 // helper function to determine if an error is retryable
 function isRetryableError(error) {
   // Network errors, timeouts, and rate limits are retryable
-  if (error.name === 'AbortError') return true; // Timeout
-  if (error.message.includes('429')) return true; // Rate limit
-  if (error.message.includes('API error')) return true; // API errors
+  if (error.name === 'AbortError') return true; // for timeout
+  if (error.message.includes('429')) return true; // for the rate limit
+  if (error.message.includes('API error')) return true; // conclusive of API errors
   return false;
 }
 
@@ -122,7 +122,7 @@ async function callOpenAIWithRetry(prompt, isJobSite = false, maxRetries = 3) {
       throw new Error(result.message);
     }
     
-    // Exponential backoff
+    // exponential backoff
     const delayMs = Math.min(1000 * Math.pow(2, attempt), 30000); // Cap at 30s
     console.log(`Retry attempt ${attempt} after ${delayMs}ms...`);
     await new Promise(resolve => setTimeout(resolve, delayMs));
