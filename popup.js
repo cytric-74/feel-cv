@@ -1,5 +1,13 @@
 const OPENAI_API_KEY = ""; //using your openAI api key here
 
+// load the api from the chrome storage
+chrome.storage.sync.get("apiKey", ({ apiKey }) => {
+  if (!apiKey) {
+    alert("Please set your OpenAI API key in the settings.");
+  } else {
+    OPENAI_API_KEY = apiKey;
+  }
+});
 
 // added cache related function
 async function checkCache(text) {
@@ -18,7 +26,14 @@ async function hashText(text) {
 
 // refined callopen AI function
 async function callOpenAI(prompt, isJobSite = false) {
+  const controller = new AbortController();
+  const timeout = 10000; // 10 seconds timeout
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
+    // Add delay to prevent rate limiting (min 1 second between requests)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -34,20 +49,97 @@ async function callOpenAI(prompt, isJobSite = false) {
               ? "Check if this is a job application page. Respond only with 'true' or 'false'."
               : "Extract ONLY: name, email, phone, 5 key skills, work experience (company, title, dates), education (degree, institution, year). Return as JSON."
           },
-          { role: "user", content: prompt.slice(0, 6000) } // Added length limit
+          { 
+            role: "user", 
+            content: prompt.slice(0, 3000) // Reduced to 3000 chars for token safety
+          }
         ],
-        temperature: 0.3 // Added for more consistent responses
-      })
+        temperature: 0.3,
+        response_format: isJobSite ? undefined : { type: "json_object" } // Enforce JSON when needed
+      }),
+      signal: controller.signal
     });
-    
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
-    
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      // Try to get error details from response
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || 'Unknown error';
+      throw new Error(`OpenAI API Error: ${response.status} - ${errorMessage}`);
+    }
+
     const data = await response.json();
-    return data.choices?.[0]?.message?.content.trim();
+    const content = data.choices?.[0]?.message?.content?.trim();
+
+    if (!content) {
+      throw new Error("No content in OpenAI response");
+    }
+
+    // For non-JobSite responses, verify JSON is valid
+    if (!isJobSite) {
+      try {
+        JSON.parse(content);
+      } catch (e) {
+        throw new Error("Invalid JSON response from OpenAI");
+      }
+    }
+
+    return content;
   } catch (error) {
+    clearTimeout(timeoutId);
     console.error("OpenAI API error:", error);
-    return `Error: ${error.message}`;
+    
+    // Return structured error object
+    return { 
+      error: true,
+      message: error.message,
+      isRetryable: isRetryableError(error) 
+    };
   }
+}
+
+// helper function to determine if an error is retryable
+function isRetryableError(error) {
+  // Network errors, timeouts, and rate limits are retryable
+  if (error.name === 'AbortError') return true; // Timeout
+  if (error.message.includes('429')) return true; // Rate limit
+  if (error.message.includes('API error')) return true; // API errors
+  return false;
+}
+
+// wrapper function with retry logic
+async function callOpenAIWithRetry(prompt, isJobSite = false, maxRetries = 3) {
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    attempt++;
+    const result = await callOpenAI(prompt, isJobSite);
+  
+    if (!result.error) return result;
+    
+    if (!result.isRetryable) {
+      throw new Error(result.message);
+    }
+    
+    // Exponential backoff
+    const delayMs = Math.min(1000 * Math.pow(2, attempt), 30000); // Cap at 30s
+    console.log(`Retry attempt ${attempt} after ${delayMs}ms...`);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  
+  throw new Error(`Max retries (${maxRetries}) exceeded`);
+}
+
+async function isSimilarResume(text, threshold = 0.8) {
+  const { resumeText } = await chrome.storage.local.get('resumeText');
+  if (!resumeText) return false;
+  
+  const intersect = [...new Set(text.split(' '))].filter(word => 
+    resumeText.includes(word)
+  ).length;
+  const similarity = intersect / Math.max(text.split(' ').length, 1);
+  return similarity >= threshold;
 }
 
 // parsing the resume with progress feedback
