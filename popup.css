@@ -1,17 +1,17 @@
 body {
-    width: 250px;   /* adjusted the length of the extension preview */
+    width: 250px;   
     min-height: 100px;
     background-color: #313131;
     color: #ffffff;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     padding: 1rem;
-    box-sizing: border-box; /* hoping the padding works nicely */
+    box-sizing: border-box; 
   }
   h2 {
     font-style: italic;
     color: #fdb14c;
-    font-size: 2rem;
+    font-size: 3rem;
     margin-bottom: 0.5rem;
   }
   input[type=file] {
@@ -19,7 +19,7 @@ body {
     margin-bottom: 0.5rem;
   }
   .buttons button {
-    width: 100%;
+    width: 75%;
     margin: 0.25rem 0;
     padding: 0.5rem;
     border-radius: 100px;
