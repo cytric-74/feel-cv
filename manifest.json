@@ -19,7 +19,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["pdf.worker.min.js", "pdf.js", "mammoth.browser.min.js"],
+      "resources": ["pdf.worker.min.js", "pdf.js", "mammoth.browser.min.js", "icons/*.svg"],
       "matches": ["<all_urls>"]
     }
   ],
