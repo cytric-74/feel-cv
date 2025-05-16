@@ -1,94 +1,104 @@
 body {
-    width: 250px;   
-    min-height: 100px;
-    background-color: #313131;
-    color: #ffffff;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    padding: 1rem;
-    box-sizing: border-box; 
-  }
-  h2 {
-    font-style: italic;
-    color: #fdb14c;
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-  }
-  input[type=file] {
-    width: 100%;
-    margin-bottom: 0.5rem;
-  }
-  .buttons button {
-    width: 75%;
-    margin: 0.25rem 0;
-    padding: 0.5rem;
-    border-radius: 100px;
-    border: none;
-    background-color: #ffffff;
-    color: rgb(53, 52, 52);
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  .buttons button:hover {
-    background-color: #87b1f5;
-  }
-  button.danger {
-    background-color: #ffffff;
-  }
-  button.danger:hover {
-    background-color: #ff9292;
-  }
-  #status {
-    margin-top: 0.5rem;
-    font-size: 0.9rem;
-    color: #38bdf8;
-  }
-  pre {
-    background: #1a1a1a;
-    padding: 0.5rem;
-    border-radius: 5px;
-    max-height: 200px;
-    overflow-y: auto;
-    font-size: 0.75rem;
-    margin-top: 0.5rem;
-  }
-  .footer-icons {
-  position: absolute;
-  bottom: 10px;
-  width: 100%;
-  text-align: center;
+  width: 250px;
+  min-height: 100px;
+  background-color: #313131;
+  color: #ffffff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 1rem;
+  box-sizing: border-box;
 }
 
-.footer-icons a {
-  margin: 0 10px;
+h2 {
+  font-style: italic;
+  color: #fdb14c;
+  font-size: 2.2rem; /* Adjusted for smaller popup width */
+  margin: 0 0 0.5rem 0;
+  text-align: left;
+}
+
+.top-icons {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.top-icons a {
+  margin: 0 8px;
 }
 
 .icon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   filter: grayscale(100%);
   opacity: 0.8;
-  transition: filter 0.3s ease, opacity 0.3s ease;
+  transition: filter 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
 .icon:hover {
   filter: grayscale(0%);
   opacity: 1;
+  transform: scale(1.3); /* Add pop on hover */
 }
-  /*.spinner {
-    border: 4px solid rgba(255, 255, 255, 0.1);
-    border-top: 4px solid #3b82f6;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    animation: spin 0.8s linear infinite;
-    margin: 10px auto;
+
+input[type="file"] {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.buttons button {
+  width: 75%;
+  margin: 0.25rem 0;
+  padding: 0.5rem;
+  border-radius: 100px;
+  border: none;
+  background-color: #ffffff;
+  color: rgb(53, 52, 52);
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.buttons button:hover {
+  background-color: #87b1f5;
+}
+
+button.danger {
+  background-color: #ffffff;
+}
+
+button.danger:hover {
+  background-color: #ff9292;
+}
+
+#status {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #38bdf8;
+}
+
+pre {
+  background: #1a1a1a;
+  padding: 0.5rem;
+  border-radius: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 300px) {
+  .icon {
+    width: 16px;
+    height: 16px;
   }
-  .hidden { display: none; }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+
+  h2 {
+    font-size: 1.6rem;
   }
-    */  
+}
