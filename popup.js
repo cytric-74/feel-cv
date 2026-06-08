@@ -30,132 +30,33 @@ const FIELD_REGISTRY = {
   notice_period:    { label: "Notice Period",          patterns: ["notice period","when can you join","availability","how soon"] },
 };
 
-const AI_GENERATED_FIELDS = ["cover_letter", "motivation", "strengths", "achievements", "summary"];
+const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", "achievements", "summary"]);
 
-const PROVIDERS = {
-  groq: {
-    name: "Groq",
-    recommended: true,
-    signup: "https://console.groq.com",
-    desc: "Free tier · 30+ req/min · No credit card required",
-    keyHint: "Starts with gsk_",
-    keyPattern: /^gsk_/,
-  },
-  openrouter: {
-    name: "OpenRouter",
-    recommended: false,
-    signup: "https://openrouter.ai",
-    desc: "Many free models · Free credits on signup",
-    keyHint: "Starts with sk-or-",
-    keyPattern: /^sk-or-/,
-  },
-  openai: {
-    name: "OpenAI",
-    recommended: false,
-    signup: "https://platform.openai.com",
-    desc: "Paid · Best quality · Pay-as-you-go",
-    keyHint: "Starts with sk-",
-    keyPattern: /^sk-(?!or-)/,
-  },
-  custom: {
-    name: "Custom",
-    recommended: false,
-    signup: null,
-    desc: "Any OpenAI-compatible endpoint (self-hosted, etc.)",
-    keyHint: "Your provider's API key",
-    keyPattern: /.+/,
-  },
-};
-
-const DEFAULT_CONFIG = {
-  provider: "groq",
-  apiKeys: { groq: "", openrouter: "", openai: "", custom: "" },
-  models: {
-    groq: "llama-3.1-8b-instant",
-    openrouter: "meta-llama/llama-3.1-8b-instruct:free",
-    openai: "gpt-3.5-turbo",
-    custom: "gpt-3.5-turbo",
-  },
-  endpoints: {
-    groq: "https://api.groq.com/openai/v1",
-    openrouter: "https://openrouter.ai/api/v1",
-    openai: "https://api.openai.com/v1",
-    custom: "",
-  },
-  connectionStatus: {},
-};
-
-// ── Storage helpers ──
-
-const ENCODE_PREFIX = "fcv_enc:";
-
-function encodeKey(key) {
-  if (!key) return "";
-  try { return ENCODE_PREFIX + btoa(key); } catch { return key; }
-}
-
-function decodeKey(stored) {
-  if (!stored) return "";
-  if (!stored.startsWith(ENCODE_PREFIX)) return stored;
-  try { return atob(stored.slice(ENCODE_PREFIX.length)); } catch { return stored; }
-}
-
+// Storage helpers
 const getProfile = () => new Promise(r => chrome.storage.local.get("fcv_profile", d => r(d.fcv_profile || {})));
 const setProfile = (p) => new Promise(r => chrome.storage.local.set({ fcv_profile: p }, r));
-const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({ ...cur, ...patch }); };
+const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({...cur, ...patch}); };
 
-async function getConfig() {
-  const data = await new Promise(r => chrome.storage.local.get("fcv_provider", d => r(d.fcv_provider || {})));
-  const cfg = { ...DEFAULT_CONFIG, ...data };
+// Provider config
+const DEFAULT_CONFIG = {
+  provider:      "ollama",
+  apiKey:        "",
+  ollamaUrl:     "http://localhost:11434",
+  ollamaModel:   "llama3.2",
+  fallbackUrl:   "https://api.groq.com/openai/v1",
+  fallbackModel: "llama-3.1-8b-instant",
+};
 
-  if (data.apiKey && !data.apiKeys) {
-    cfg.apiKeys = { ...DEFAULT_CONFIG.apiKeys };
-    let prov = data.provider || "groq";
-    if (prov === "openai_compat" || prov === "ollama") prov = "groq";
-    if (!["groq","openrouter","openai","custom"].includes(prov)) prov = "groq";
-    cfg.apiKeys[prov] = data.apiKey;
-    cfg.provider = prov;
-  }
+const getProviderConfig = () => new Promise(r =>
+  chrome.storage.local.get("fcv_provider", d =>
+    r({ ...DEFAULT_CONFIG, ...(d.fcv_provider || {}) })
+  )
+);
+const setProviderConfig = (cfg) => new Promise(r =>
+  chrome.storage.local.set({ fcv_provider: cfg }, r)
+);
 
-  if (cfg.provider === "ollama" || cfg.provider === "openai_compat") {
-    cfg.provider = "groq";
-  }
-
-  if (!cfg.apiKeys) cfg.apiKeys = { ...DEFAULT_CONFIG.apiKeys };
-
-  const decoded = {};
-  for (const [k, v] of Object.entries(cfg.apiKeys)) {
-    decoded[k] = decodeKey(v);
-  }
-  cfg.apiKeys = decoded;
-
-  if (!cfg.models) cfg.models = { ...DEFAULT_CONFIG.models };
-  if (!cfg.endpoints) cfg.endpoints = { ...DEFAULT_CONFIG.endpoints };
-  if (!cfg.connectionStatus) cfg.connectionStatus = {};
-
-  return cfg;
-}
-
-async function setConfig(cfg) {
-  const toStore = { ...cfg };
-  const encoded = {};
-  for (const [k, v] of Object.entries(cfg.apiKeys || {})) {
-    encoded[k] = encodeKey(v);
-  }
-  toStore.apiKeys = encoded;
-  return new Promise(r => chrome.storage.local.set({ fcv_provider: toStore }, r));
-}
-
-function getActiveApiKey(cfg) {
-  return (cfg.apiKeys || {})[cfg.provider] || "";
-}
-
-function hasApiKey(cfg) {
-  return !!getActiveApiKey(cfg).trim();
-}
-
-// ── File extraction ──
-
+// file extraction
 async function extractTextFromFile(file) {
   const ext = file.name.split(".").pop().toLowerCase();
   if (ext === "txt") return file.text();
@@ -186,8 +87,7 @@ async function extractDOCX(file) {
   return result.value;
 }
 
-// ── Resume parsing ──
-
+// resume parsing
 function parseResumeText(text) {
   const profile = {};
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -204,6 +104,7 @@ function parseResumeText(text) {
   const ghMatch = text.match(/github\.com\/([a-zA-Z0-9\-_%]+)/i);
   if (ghMatch) profile.github = "https://github.com/" + ghMatch[1];
 
+  // name
   for (const line of lines.slice(0, 6)) {
     if (line.length > 2 && line.length < 55 &&
         !line.includes("@") && !line.includes("http") &&
@@ -218,12 +119,15 @@ function parseResumeText(text) {
     }
   }
 
+  // location
   const locMatch = text.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b/);
   if (locMatch) profile.location = locMatch[0];
 
+  // years of experience
   const yoeMatch = text.match(/(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/i);
   if (yoeMatch) profile.years_experience = yoeMatch[1] + "+ years";
 
+  // skills
   const skillsIdx = lines.findIndex(l => /^(skills|technical skills|core competencies)/i.test(l));
   if (skillsIdx !== -1) {
     const skillLines = [];
@@ -234,6 +138,7 @@ function parseResumeText(text) {
     if (skillLines.length) profile.skills = skillLines.join(", ");
   }
 
+  // education
   const eduIdx = lines.findIndex(l => /^(education|academic)/i.test(l));
   if (eduIdx !== -1) {
     for (let i = eduIdx + 1; i < eduIdx + 8 && i < lines.length; i++) {
@@ -247,6 +152,7 @@ function parseResumeText(text) {
     }
   }
 
+  // summary
   const summIdx = lines.findIndex(l => /^(summary|profile|objective|about)/i.test(l));
   if (summIdx !== -1) {
     const summLines = [];
@@ -257,6 +163,7 @@ function parseResumeText(text) {
     if (summLines.length) profile.summary = summLines.join(" ");
   }
 
+  // current company
   const expIdx = lines.findIndex(l => /^(experience|work experience|employment)/i.test(l));
   if (expIdx !== -1) {
     for (let i = expIdx + 1; i < expIdx + 4 && i < lines.length; i++) {
@@ -270,8 +177,7 @@ function parseResumeText(text) {
   return profile;
 }
 
-// ── AI ──
-
+// AI generation
 function buildPrompt(fieldKey, profile, jobTitle, company) {
   const { email, phone, ...safeProfile } = profile;
   const p = JSON.stringify(safeProfile);
@@ -287,288 +193,138 @@ function buildPrompt(fieldKey, profile, jobTitle, company) {
   return prompts[fieldKey] || `Generate a short answer for the field "${fieldKey}" from this profile: ${p}. Output only the answer.`;
 }
 
-function mapApiError(err, status) {
-  const msg = (err?.error?.message || err?.message || "").toLowerCase();
-  if (status === 401 || status === 403 || msg.includes("invalid") || msg.includes("unauthorized") || msg.includes("api key")) {
-    return "Invalid API key. Check and try again.";
-  }
-  if (status === 429 || msg.includes("rate limit") || msg.includes("too many")) {
-    return "Rate limit exceeded. Try again in a minute.";
-  }
-  if (msg.includes("model") && (msg.includes("not found") || msg.includes("not available") || msg.includes("does not exist"))) {
-    return "Model not available for your API key.";
-  }
-  if (msg.includes("fetch") || msg.includes("network") || msg.includes("failed to fetch")) {
-    return "Network error. Check your internet connection.";
-  }
-  return err?.error?.message || err?.message || "API call failed.";
-}
-
-async function callAI(prompt, cfg) {
-  const provider = cfg.provider;
-  const endpoint = (cfg.endpoints[provider] || "").replace(/\/$/, "");
-  const model = cfg.models[provider];
-  const apiKey = getActiveApiKey(cfg);
-
-  if (!apiKey) throw new Error("No API key configured.");
-  if (!endpoint) throw new Error("No API endpoint configured.");
-
-  const headers = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${apiKey}`,
-  };
-
-  if (provider === "openrouter") {
-    headers["HTTP-Referer"] = "https://feelcv.extension";
-    headers["X-Title"] = "FeelCV";
-  }
-
-  const response = await fetch(`${endpoint}/chat/completions`, {
+async function callOllama(prompt, cfg) {
+  const url = `${cfg.ollamaUrl.replace(/\/$/, "")}/api/generate`;
+  const res = await fetch(url, {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 500,
-    }),
+      model:  cfg.ollamaModel,
+      prompt,
+      stream: false,
+      options: { num_predict: 400, temperature: 0.7 }
+    })
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(mapApiError(error, response.status));
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    if (res.status === 404) throw new Error(`Model "${cfg.ollamaModel}" not found. Run: ollama pull ${cfg.ollamaModel}`);
+    throw new Error(`Ollama error ${res.status}: ${txt.slice(0, 120)}`);
   }
-
-  const data = await response.json();
-  return (data.choices?.[0]?.message?.content || "").trim();
+  const data = await res.json();
+  return (data.response || "").trim();
 }
 
-async function testConnection(cfg, provider, apiKey, endpoint, model) {
-  const ep = (endpoint || cfg.endpoints[provider] || "").replace(/\/$/, "");
-  const mdl = model || cfg.models[provider];
-  const key = apiKey || getActiveApiKey(cfg);
-
-  if (!key) return { ok: false, message: "No API key entered." };
-  if (!ep) return { ok: false, message: "No endpoint configured." };
-
-  const headers = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${key}`,
-  };
-  if (provider === "openrouter") {
-    headers["HTTP-Referer"] = "https://feelcv.extension";
-    headers["X-Title"] = "FeelCV";
-  }
-
-  try {
-    const res = await fetch(`${ep}/chat/completions`, {
-      method: "POST",
-      headers,
-      signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({
-        model: mdl,
-        messages: [{ role: "user", content: "Say OK" }],
-        max_tokens: 5,
-      }),
-    });
-
-    if (res.ok) return { ok: true, message: "Connected successfully." };
-
+async function callOpenAICompat(prompt, cfg) {
+  if (!cfg.apiKey) throw new Error("No API key set for fallback provider.");
+  const url = `${cfg.fallbackUrl.replace(/\/$/, "")}/chat/completions`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model:      cfg.fallbackModel,
+      max_tokens: 400,
+      temperature: 0.7,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    return { ok: false, message: mapApiError(err, res.status) };
-  } catch (e) {
-    if (e.name === "TimeoutError") return { ok: false, message: "Connection timed out." };
-    return { ok: false, message: "Network error. Check your internet connection." };
+    throw new Error(err.error?.message || `API error ${res.status}`);
   }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
 async function generateWithAI(fieldKey, profile, jobTitle = "", company = "") {
-  const cfg = await getConfig();
-  if (!hasApiKey(cfg)) {
-    showApiKeyModal();
-    throw new Error("API key required.");
-  }
+  const cfg    = await getProviderConfig();
   const prompt = buildPrompt(fieldKey, profile, jobTitle, company);
-  return callAI(prompt, cfg);
-}
 
-// ── DOM helpers ──
-
-const $ = id => document.getElementById(id);
-
-function status(msg, type = "info") {
-  const el = $("status");
-  if (!el) return;
-  el.textContent = msg;
-  el.className = "status-msg " + type;
-  if (msg) {
-    setTimeout(() => {
-      if (el.textContent === msg) {
-        el.textContent = "";
-        el.className = "status-msg";
+  if (cfg.provider === "ollama") {
+    try {
+      return await callOllama(prompt, cfg);
+    } catch (err) {
+      if (err.message.includes("fetch") || err.message.includes("Failed to fetch")) {
+        throw new Error("Ollama is not running. Start it with: ollama serve");
       }
-    }, 4000);
+      throw err;
+    }
   }
+
+  if (cfg.provider === "openai_compat") {
+    return await callOpenAICompat(prompt, cfg);
+  }
+
+  throw new Error("Unknown provider.");
 }
 
-function switchTab(tabId) {
-  document.querySelectorAll(".tab-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.tab === tabId);
-  });
-  document.querySelectorAll(".tab-pane").forEach(p => {
-    p.classList.toggle("active", p.id === tabId);
-  });
-  if (tabId === "tab-ai") renderAIPanel();
-  if (tabId === "tab-settings") renderSettings();
-}
-
-function escapeHtml(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-// ── Hero & stats ──
-
-const PROFILE_FIELD_TARGET = 12;
-
-function setRingPercent(percent) {
-  const ring = $("hero-ring-progress");
-  const label = $("hero-percent");
-  const circumference = 2 * Math.PI * 28;
-  const offset = circumference - (percent / 100) * circumference;
-  if (ring) ring.style.strokeDashoffset = offset;
-  if (label) label.textContent = Math.round(percent) + "%";
-}
-
-function updateHeroStats(profile, cfg) {
-  const keys = Object.keys(profile);
-  const count = keys.length;
-  const percent = Math.min(100, Math.round((count / PROFILE_FIELD_TARGET) * 100));
-
-  const countEl = $("hero-field-count");
-  if (countEl) countEl.textContent = count;
-
-  setRingPercent(percent);
-
-  const statusEl = $("hero-status-text");
+// DOM helpers
+const $ = id => document.getElementById(id);
+const status = (msg, color = "#38bdf8") => {
+  const statusEl = $("status");
   if (statusEl) {
-    if (!count) statusEl.textContent = "Upload your resume to begin";
-    else if (percent >= 100) statusEl.textContent = "Profile complete — ready to autofill";
-    else statusEl.textContent = `Extracting data… ${percent}% complete`;
+    statusEl.textContent = msg;
+    statusEl.style.color = color;
+    setTimeout(() => {
+      if (statusEl.textContent === msg) statusEl.textContent = "";
+    }, 3000);
   }
+};
 
-  const apiVal = $("stat-api-value");
-  const provVal = $("stat-provider-value");
-  if (cfg) {
-    const key = hasApiKey(cfg);
-    const st = cfg.connectionStatus?.[cfg.provider];
-    if (apiVal) {
-      apiVal.textContent = !key ? "Not set" : st === "connected" ? "Connected" : st === "invalid" ? "Invalid" : "Set";
-      apiVal.className = "stat-value" + (st === "connected" ? " connected" : !key ? " warning" : "");
-    }
-    if (provVal) {
-      provVal.textContent = key ? (PROVIDERS[cfg.provider]?.name || cfg.provider) : "—";
-    }
-  }
-
-  const deleteBtn = $("delete-resume");
-  if (deleteBtn) deleteBtn.classList.toggle("hidden", !count);
-}
-
-// ── Welcome & banners ──
-
-async function updateOnboardingState() {
-  const profile = await getProfile();
-  const cfg = await getConfig();
-  const hasProfile = Object.keys(profile).length > 0;
-  const hasKey = hasApiKey(cfg);
-
-  updateHeroStats(profile, cfg);
-
-  const welcome = $("welcome-screen");
-  const dismissed = localStorage.getItem("fcv_welcome_dismissed");
-  if (welcome) {
-    welcome.classList.toggle("hidden", (hasProfile && hasKey) || dismissed === "1");
-  }
-
-  const step1 = $("welcome-step-1");
-  const step2 = $("welcome-step-2");
-  if (step1) step1.classList.toggle("done", hasProfile);
-  if (step2) step2.classList.toggle("done", hasKey);
-
-  const banner = $("api-key-banner");
-  if (banner) banner.classList.toggle("hidden", hasKey);
-}
-
-// ── Profile view ──
-
+// render profile view
 function renderProfileView(profile) {
+  const keys = Object.keys(profile);
   const container = $("profile-content");
   if (!container) return;
-
-  const keys = Object.keys(profile);
+  
   if (!keys.length) {
-    container.innerHTML = `<div class="empty-state"><p>No profile yet</p></div>`;
+    container.innerHTML = `<div class="empty-state">No profile yet. Upload your resume.</div>`;
     return;
   }
 
-  container.innerHTML = keys.map(key => {
+  const html = keys.map(key => {
     const meta = FIELD_REGISTRY[key];
     const label = meta?.label || key;
     const val = profile[key];
-    const display = val.length > 40 ? val.slice(0, 37) + "…" : val;
     return `
-      <div class="list-row clickable edit-btn" data-key="${key}">
-        <div class="list-row-content">
-          <span class="list-row-label">${escapeHtml(label)}</span>
-          <span class="list-row-value" title="${escapeHtml(val)}">${escapeHtml(display)}</span>
-        </div>
-        <span class="list-row-action ai-gen-arrow">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-        </span>
+      <div class="profile-row" data-key="${key}">
+        <span class="field-label">${label}</span>
+        <span class="field-value" title="${val}">${val.length > 60 ? val.slice(0,57)+"…" : val}</span>
+        <button class="edit-btn" data-key="${key}">✎</button>
       </div>`;
   }).join("");
+  container.innerHTML = html;
 
   container.querySelectorAll(".edit-btn").forEach(btn => {
     btn.onclick = () => openEditModal(btn.dataset.key, profile[btn.dataset.key]);
   });
-
-  getConfig().then(c => updateHeroStats(profile, c));
 }
-
-// ── Modals ──
 
 function openEditModal(key, currentValue) {
   const meta = FIELD_REGISTRY[key];
   $("modal-label").textContent = meta?.label || key;
   $("modal-input").value = currentValue || "";
   $("modal-key").value = key;
-  $("modal-overlay").classList.remove("hidden");
+  $("modal-overlay").style.display = "flex";
   $("modal-input").focus();
 }
 
 function closeModal() {
-  $("modal-overlay").classList.add("hidden");
+  $("modal-overlay").style.display = "none";
 }
 
-function showApiKeyModal() {
-  $("api-modal-overlay").classList.remove("hidden");
-}
-
-function closeApiKeyModal() {
-  $("api-modal-overlay").classList.add("hidden");
-}
-
-// ── Learn banner ──
-
+// learn banner
 function showLearnBanner(key, value, fieldLabel) {
   const banner = document.createElement("div");
   banner.className = "learn-banner";
   banner.innerHTML = `
-    <span>Learn "<b>${escapeHtml(fieldLabel)}</b>"?</span>
-    <div class="learn-val">${escapeHtml(value.slice(0, 80))}${value.length > 80 ? "…" : ""}</div>
+    <span>💡 Learn "<b>${fieldLabel}</b>"?</span>
+    <div class="learn-val">${value.slice(0,80)}${value.length > 80 ? "…" : ""}</div>
     <div class="learn-btns">
-      <button class="btn-pill-sm btn-yes" data-key="${key}" data-val="${encodeURIComponent(value)}">Save</button>
-      <button class="btn-secondary btn-no" style="padding:6px 14px;font-size:11px;border-radius:100px">Dismiss</button>
+      <button class="btn-yes" data-key="${key}" data-val="${encodeURIComponent(value)}">Save</button>
+      <button class="btn-no">Dismiss</button>
     </div>`;
   const queue = $("learn-queue");
   if (queue) queue.prepend(banner);
@@ -578,521 +334,306 @@ function showLearnBanner(key, value, fieldLabel) {
     const v = decodeURIComponent(e.target.dataset.val);
     await updateProfile({ [k]: v });
     banner.remove();
-    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "success");
+    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "#4ade80");
     renderProfileView(await getProfile());
-    updateOnboardingState();
   };
   banner.querySelector(".btn-no").onclick = () => banner.remove();
 }
 
-// ── AI Studio ──
-
+// AI panel
 async function renderAIPanel() {
   const profile = await getProfile();
-  const cfg = await getConfig();
   const container = $("ai-content");
   if (!container) return;
-
+  
   if (!Object.keys(profile).length) {
-    container.innerHTML = `<div class="empty-state"><p>Upload your resume first</p></div>`;
-    return;
-  }
-
-  if (!hasApiKey(cfg)) {
-    container.innerHTML = `
-      <div class="empty-state ai-prompt">
-        <strong>Setup API key</strong>
-        <p style="margin-top:6px">2 min · Free with Groq</p>
-        <button id="ai-setup-btn" class="btn-primary btn-pill" style="margin-top:16px">Setup →</button>
-      </div>`;
-    $("ai-setup-btn").onclick = () => switchTab("tab-settings");
+    container.innerHTML = `<div class="empty-state">Upload your resume first.</div>`;
     return;
   }
 
   container.innerHTML = `
-    <div class="ai-hero">
-      <div class="ai-hero-title">Job Context</div>
-      <div class="ai-inputs">
-        <input id="ai-job-title" class="input" placeholder="Job title" />
-        <input id="ai-company" class="input" placeholder="Company name" />
-      </div>
+    <div class="ai-form">
+      <input id="ai-job-title" placeholder="Job title (e.g. Frontend Engineer)" class="ai-input" />
+      <input id="ai-company"   placeholder="Company name (optional)" class="ai-input" />
     </div>
-    <div class="section-label">Generate</div>
-    <div class="ai-gen-list">
-      ${AI_GENERATED_FIELDS.map(k => `
-        <div class="ai-gen-row ai-gen-btn" data-field="${k}">
-          <div class="list-row-content">
-            <span class="list-row-label">${escapeHtml(FIELD_REGISTRY[k]?.label || k)}</span>
-            <span class="list-row-meta">Tap to generate</span>
-          </div>
-          <span class="ai-gen-arrow">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          </span>
-        </div>`).join("")}
+    <div class="ai-field-btns">
+      ${[...AI_GENERATED_FIELDS].map(k => `
+        <button class="ai-gen-btn" data-field="${k}">
+          ${FIELD_REGISTRY[k]?.label || k}
+        </button>`).join("")}
     </div>
-    <div id="ai-result-area" class="ai-result-card">
-      <span style="color:var(--muted);font-size:12px">Select a type to generate</span>
-    </div>`;
+    <div id="ai-result-area" class="ai-result"></div>`;
 
   container.querySelectorAll(".ai-gen-btn").forEach(btn => {
     btn.onclick = async () => {
-      const field = btn.dataset.field;
+      const field    = btn.dataset.field;
       const jobTitle = $("ai-job-title")?.value.trim() || "";
       const company  = $("ai-company")?.value.trim() || "";
       const resultArea = $("ai-result-area");
-
-      container.querySelectorAll(".ai-gen-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      resultArea.innerHTML = `<div class="result-loading"><div class="spinner"></div>Generating…</div>`;
-
+      if (resultArea) resultArea.textContent = "Generating…";
+      btn.disabled = true;
       try {
         const text = await generateWithAI(field, profile, jobTitle, company);
-        resultArea.innerHTML = `
-          <div class="result-header">
-            <span class="result-label">${escapeHtml(FIELD_REGISTRY[field]?.label || field)}</span>
-            <button id="copy-result" class="btn-pill-sm" style="background:transparent;border:1px solid var(--border);color:var(--text)">Copy</button>
-          </div>
-          <div class="result-text">${escapeHtml(text)}</div>`;
-        $("copy-result").onclick = (e) => {
-          navigator.clipboard.writeText(text);
-          const b = e.target;
-          b.textContent = "Copied!";
-          setTimeout(() => { b.textContent = "Copy"; }, 1500);
-        };
-      } catch (err) {
-        if (err.message !== "API key required.") {
-          resultArea.innerHTML = `<span style="color:var(--danger);font-size:12px">${escapeHtml(err.message)}</span>`;
+        if (resultArea) {
+          resultArea.innerHTML = `
+            <div class="result-label">${FIELD_REGISTRY[field]?.label}</div>
+            <div class="result-text">${text.replace(/</g, "&lt;")}</div>
+            <button id="copy-result" class="copy-btn">Copy</button>`;
+          const copyBtn = $("copy-result");
+          if (copyBtn) {
+            copyBtn.onclick = () => {
+              navigator.clipboard.writeText(text);
+              copyBtn.textContent = "Copied!";
+              setTimeout(() => { if(copyBtn) copyBtn.textContent = "Copy"; }, 1500);
+            };
+          }
         }
+      } catch (err) {
+        if (resultArea) resultArea.textContent = "Error: " + err.message;
       }
+      btn.disabled = false;
     };
   });
 }
 
-// ── Settings ──
-
-function getConnectionStatusHtml(cfg) {
-  const st = cfg.connectionStatus?.[cfg.provider];
-  if (!getActiveApiKey(cfg)) {
-    return `<div class="connection-status unset">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      Not set — add your API key
-    </div>`;
-  }
-  if (st === "connected") {
-    return `<div class="connection-status connected">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-      Connected
-    </div>`;
-  }
-  if (st === "invalid") {
-    return `<div class="connection-status invalid">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-      Invalid key
-    </div>`;
-  }
-  return "";
-}
-
-function validateKeyFormat(provider, key) {
-  if (!key) return { valid: false, hint: PROVIDERS[provider]?.keyHint || "" };
-  const pat = PROVIDERS[provider]?.keyPattern;
-  if (pat && !pat.test(key)) {
-    return { valid: false, hint: `Expected format: ${PROVIDERS[provider].keyHint}` };
-  }
-  return { valid: true, hint: "Format looks good" };
-}
-
+// Settings panel
 async function renderSettings() {
-  const cfg = await getConfig();
+  const cfg = await getProviderConfig();
   const container = $("settings-content");
   if (!container) return;
 
-  const prov = cfg.provider;
-  const provInfo = PROVIDERS[prov];
-  const apiKey = (cfg.apiKeys || {})[prov] || "";
-
   container.innerHTML = `
-    <div class="settings-hero">
-      <div class="settings-hero-title">API Provider</div>
-      <p class="settings-hero-desc" id="provider-desc">
-        ${provInfo.desc}
-        ${provInfo.signup ? `<br><a href="${provInfo.signup}" target="_blank">Get free key →</a>` : ""}
-      </p>
+    <div class="settings-section">
+      <div class="settings-section-title">AI Provider</div>
 
-      <div class="provider-list">
-        ${Object.entries(PROVIDERS).map(([id, p]) => `
-          <div class="provider-row ${id === prov ? "active" : ""}" data-provider="${id}">
-            <div>
-              <span class="provider-row-name">${p.name}${p.recommended ? '<span class="provider-row-badge">Free</span>' : ""}</span>
-              <div class="provider-row-desc">${p.desc}</div>
-            </div>
-            <button class="pill-toggle ${id === prov ? "on" : ""}" data-provider="${id}" type="button" aria-label="Select ${p.name}"></button>
-          </div>`).join("")}
+      <div class="provider-toggle">
+        <button class="provider-btn ${cfg.provider === "ollama" ? "active" : ""}" data-p="ollama">🔒 Ollama (Local)</button>
+        <button class="provider-btn ${cfg.provider === "openai_compat" ? "active" : ""}" data-p="openai_compat">☁ External API</button>
       </div>
 
-      <label class="settings-label">API Key</label>
-      <div class="input-wrapper">
-        <input id="settings-api-key" type="password" class="input mono" value="${escapeHtml(apiKey)}" placeholder="${provInfo.keyHint}" autocomplete="off" />
-        <button id="toggle-key-vis" class="toggle-visibility" type="button" title="Show/hide">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
+      <div id="ollama-config" class="${cfg.provider !== "ollama" ? "hidden" : ""}">
+        <div class="privacy-badge">✦ Your data never leaves your device</div>
+        <label class="settings-label">Ollama URL</label>
+        <input id="ollama-url"   class="ai-input" value="${cfg.ollamaUrl}" placeholder="http://localhost:11434" />
+        <label class="settings-label">Model</label>
+        <input id="ollama-model" class="ai-input" value="${cfg.ollamaModel}" placeholder="llama3.2" />
+        <div class="settings-hint">
+          Install: <code>brew install ollama</code> or <a href="https://ollama.com" target="_blank">ollama.com</a><br>
+          Pull model: <code>ollama pull llama3.2</code><br>
+          Start: <code>ollama serve</code>
+        </div>
+        <button id="test-ollama-btn" class="pill-btn secondary" style="margin-top:8px">Test Connection</button>
+        <div id="ollama-test-result" style="font-size:11px;margin-top:6px"></div>
       </div>
-      <div id="key-hint" class="input-hint">${provInfo.keyHint}</div>
 
-      <div id="custom-fields" class="${prov === "custom" ? "" : "hidden"}">
+      <div id="ext-config" class="${cfg.provider !== "openai_compat" ? "hidden" : ""}">
+        <div class="privacy-badge warn">⚠ Profile data will be sent externally</div>
         <label class="settings-label">Base URL</label>
-        <input id="settings-endpoint" class="input mono" value="${escapeHtml(cfg.endpoints.custom || "")}" placeholder="https://your-api.com/v1" />
+        <input id="fallback-url"   class="ai-input" value="${cfg.fallbackUrl}" placeholder="https://api.groq.com/openai/v1" />
+        <label class="settings-label">Model</label>
+        <input id="fallback-model" class="ai-input" value="${cfg.fallbackModel}" placeholder="llama-3.1-8b-instant" />
+        <label class="settings-label">API Key</label>
+        <input id="ext-api-key" type="password" class="ai-input" value="${cfg.apiKey}" placeholder="sk-..." />
+        <div class="settings-hint">
+          Works with: Groq · OpenRouter · Together · OpenAI · any OpenAI-compatible endpoint.
+        </div>
       </div>
 
-      <label class="settings-label">Model</label>
-      <input id="settings-model" class="input mono" value="${escapeHtml(cfg.models[prov] || "")}" placeholder="Model name" />
-
-      <div id="connection-status-area">${getConnectionStatusHtml(cfg)}</div>
-
-      <div class="settings-actions">
-        <button id="test-connection-btn" class="btn-secondary btn-pill">Test</button>
-        <button id="save-settings-btn" class="btn-primary btn-pill">Save</button>
-      </div>
-      <button id="delete-key-btn" class="text-btn danger-text" style="margin-top:12px">Delete key</button>
+      <button id="save-provider-btn" class="pill-btn primary" style="margin-top:10px;width:100%">Save Settings</button>
     </div>
 
-    <div class="section-label">Data</div>
-    <div class="data-list">
-      <div class="data-row" id="export-profile-btn">Export Profile</div>
-      <div class="data-row" id="reset-settings-btn">Reset Settings</div>
-      <div class="data-row danger" id="nuke-btn">Delete All Data</div>
+    <hr class="divider">
+
+    <div class="settings-section">
+      <div class="settings-section-title">Profile Data</div>
+      <div style="display:flex;gap:6px">
+        <button id="export-profile-btn" class="pill-btn secondary" style="flex:1">Export JSON</button>
+        <button id="nuke-btn"           class="pill-btn danger"    style="flex:1">Delete All</button>
+      </div>
     </div>`;
 
-  let selectedProvider = prov;
-
-  function selectProvider(id) {
-    selectedProvider = id;
-    container.querySelectorAll(".provider-row").forEach(r => {
-      const active = r.dataset.provider === id;
-      r.classList.toggle("active", active);
-      r.querySelector(".pill-toggle")?.classList.toggle("on", active);
-    });
-    const info = PROVIDERS[id];
-    $("provider-desc").innerHTML = `
-      ${info.desc}
-      ${info.signup ? `<br><a href="${info.signup}" target="_blank">Get free key →</a>` : ""}`;
-    const keyInput = $("settings-api-key");
-    keyInput.value = cfg.apiKeys[id] || "";
-    keyInput.placeholder = info.keyHint;
-    $("key-hint").textContent = info.keyHint;
-    $("key-hint").className = "input-hint";
-    $("settings-model").value = cfg.models[id] || "";
-    $("custom-fields").classList.toggle("hidden", id !== "custom");
-    $("connection-status-area").innerHTML = "";
-  }
-
-  container.querySelectorAll(".provider-row, .pill-toggle").forEach(el => {
-    el.onclick = (e) => {
-      e.stopPropagation();
-      selectProvider(el.dataset.provider);
+  // Provider toggle
+  container.querySelectorAll(".provider-btn").forEach(btn => {
+    btn.onclick = () => {
+      container.querySelectorAll(".provider-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const p = btn.dataset.p;
+      const ollamaDiv = document.getElementById("ollama-config");
+      const extDiv = document.getElementById("ext-config");
+      if (ollamaDiv) ollamaDiv.classList.toggle("hidden", p !== "ollama");
+      if (extDiv) extDiv.classList.toggle("hidden", p !== "openai_compat");
     };
   });
 
-  // Toggle visibility
-  $("toggle-key-vis").onclick = () => {
-    const inp = $("settings-api-key");
-    inp.type = inp.type === "password" ? "text" : "password";
-  };
-
-  // Real-time key validation
-  $("settings-api-key").addEventListener("input", (e) => {
-    const v = validateKeyFormat(selectedProvider, e.target.value.trim());
-    const hint = $("key-hint");
-    hint.textContent = v.hint;
-    hint.className = "input-hint" + (e.target.value ? (v.valid ? " valid" : " invalid") : "");
-  });
-
-  // Ctrl/Cmd+Enter to save
-  $("settings-api-key").addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      $("save-settings-btn").click();
-    }
-  });
-
-  // Test connection
-  $("test-connection-btn").onclick = async () => {
-    const btn = $("test-connection-btn");
-    const key = $("settings-api-key").value.trim();
-    const model = $("settings-model").value.trim();
-    const endpoint = selectedProvider === "custom"
-      ? $("settings-endpoint")?.value.trim()
-      : cfg.endpoints[selectedProvider];
-
-    btn.classList.add("btn-loading");
-    btn.disabled = true;
-
-    const result = await testConnection(cfg, selectedProvider, key, endpoint, model);
-
-    btn.classList.remove("btn-loading");
-    btn.disabled = false;
-
-    const statusArea = $("connection-status-area");
-    if (result.ok) {
-      statusArea.innerHTML = `<div class="connection-status connected">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        ${result.message}
-      </div>`;
-    } else {
-      statusArea.innerHTML = `<div class="connection-status invalid">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        ${escapeHtml(result.message)}
-      </div>`;
-    }
-  };
+  // Test Ollama
+  const testBtn = document.getElementById("test-ollama-btn");
+  if (testBtn) {
+    testBtn.onclick = async () => {
+      const url = document.getElementById("ollama-url")?.value.trim() || "http://localhost:11434";
+      const el = document.getElementById("ollama-test-result");
+      if (el) {
+        el.textContent = "Testing…";
+        el.style.color = "#888";
+        try {
+          const res = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { signal: AbortSignal.timeout(4000) });
+          if (res.ok) {
+            const data = await res.json();
+            const models = data.models?.map(m => m.name).join(", ") || "none";
+            el.textContent = `✓ Connected. Models: ${models}`;
+            el.style.color = "#4ade80";
+          } else {
+            el.textContent = `✗ HTTP ${res.status}`;
+            el.style.color = "#f87171";
+          }
+        } catch {
+          el.textContent = "✗ Can't reach Ollama. Is it running? (ollama serve)";
+          el.style.color = "#f87171";
+        }
+      }
+    };
+  }
 
   // Save settings
-  $("save-settings-btn").onclick = async () => {
-    const key = $("settings-api-key").value.trim();
-    const model = $("settings-model").value.trim();
-    const cur = await getConfig();
-
-    cur.provider = selectedProvider;
-    cur.apiKeys[selectedProvider] = key;
-    if (model) cur.models[selectedProvider] = model;
-    if (selectedProvider === "custom") {
-      cur.endpoints.custom = $("settings-endpoint")?.value.trim() || "";
-    }
-
-    if (key) {
-      const testResult = await testConnection(cur, selectedProvider, key,
-        selectedProvider === "custom" ? cur.endpoints.custom : cur.endpoints[selectedProvider],
-        cur.models[selectedProvider]);
-      cur.connectionStatus[selectedProvider] = testResult.ok ? "connected" : "invalid";
-    } else {
-      cur.connectionStatus[selectedProvider] = undefined;
-    }
-
-    await setConfig(cur);
-    status("Settings saved.", "success");
-    updateOnboardingState();
-    renderSettings();
-  };
-
-  // Delete key
-  $("delete-key-btn").onclick = async () => {
-    if (!confirm("Delete API key for " + PROVIDERS[selectedProvider].name + "?")) return;
-    const cur = await getConfig();
-    cur.apiKeys[selectedProvider] = "";
-    delete cur.connectionStatus[selectedProvider];
-    await setConfig(cur);
-    status("API key deleted.", "success");
-    updateOnboardingState();
-    renderSettings();
-  };
-
-  // Export
-  $("export-profile-btn").onclick = async () => {
-    const profile = await getProfile();
-    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement("a"), { href: url, download: "feelcv-profile.json" });
-    a.click();
-    URL.revokeObjectURL(url);
-    status("Profile exported.", "success");
-  };
-
-  // Reset settings
-  $("reset-settings-btn").onclick = async () => {
-    if (!confirm("Reset all settings to defaults? Your profile will be kept.")) return;
-    const profile = await getProfile();
-    await chrome.storage.local.clear();
-    if (Object.keys(profile).length) await setProfile(profile);
-    status("Settings reset.", "success");
-    updateOnboardingState();
-    renderSettings();
-  };
-
-  // Delete all
-  $("nuke-btn").onclick = async () => {
-    if (!confirm("Delete your entire profile and all settings? This cannot be undone.")) return;
-    await chrome.storage.local.clear();
-    localStorage.removeItem("fcv_welcome_dismissed");
-    status("All data deleted.", "error");
-    renderProfileView({});
-    updateOnboardingState();
-  };
-}
-
-// ── Tabs ──
-
-function initTabs() {
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.onclick = () => switchTab(btn.dataset.tab);
-  });
-}
-
-// ── Upload / drag-drop ──
-
-function setFileLabel(name) {
-  const fileName = $("file-name");
-  if (!fileName) return;
-  if (name) {
-    fileName.textContent = name;
-    fileName.classList.add("has-file");
-  } else {
-    fileName.textContent = "Drop or click to upload";
-    fileName.classList.remove("has-file");
-  }
-}
-
-function initUpload() {
-  const dropZone = $("upload-drop-zone");
-  const fileInput = $("resume-upload");
-
-  if (fileInput) {
-    fileInput.onchange = () => {
-      if (fileInput.files[0]) setFileLabel(fileInput.files[0].name);
+  const saveBtn = document.getElementById("save-provider-btn");
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const activeProv = container.querySelector(".provider-btn.active")?.dataset.p || "ollama";
+      const newCfg = {
+        provider:      activeProv,
+        ollamaUrl:     document.getElementById("ollama-url")?.value.trim()     || DEFAULT_CONFIG.ollamaUrl,
+        ollamaModel:   document.getElementById("ollama-model")?.value.trim()   || DEFAULT_CONFIG.ollamaModel,
+        fallbackUrl:   document.getElementById("fallback-url")?.value.trim()   || DEFAULT_CONFIG.fallbackUrl,
+        fallbackModel: document.getElementById("fallback-model")?.value.trim() || DEFAULT_CONFIG.fallbackModel,
+        apiKey:        document.getElementById("ext-api-key")?.value.trim()    || "",
+      };
+      await setProviderConfig(newCfg);
+      status("Settings saved.", "#4ade80");
     };
   }
 
-  if (dropZone) {
-    ["dragenter", "dragover"].forEach(evt => {
-      dropZone.addEventListener(evt, (e) => {
-        e.preventDefault();
-        dropZone.classList.add("drag-over");
-      });
-    });
-    ["dragleave", "drop"].forEach(evt => {
-      dropZone.addEventListener(evt, (e) => {
-        e.preventDefault();
-        dropZone.classList.remove("drag-over");
-      });
-    });
-    dropZone.addEventListener("drop", (e) => {
-      const file = e.dataTransfer?.files?.[0];
-      if (file && fileInput) {
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        fileInput.files = dt.files;
-        setFileLabel(file.name);
-      }
-    });
+  // Export profile
+  const exportBtn = document.getElementById("export-profile-btn");
+  if (exportBtn) {
+    exportBtn.onclick = async () => {
+      const profile = await getProfile();
+      const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement("a"), { href: url, download: "feelcv-profile.json" });
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  // Nuke
+  const nukeBtn = document.getElementById("nuke-btn");
+  if (nukeBtn) {
+    nukeBtn.onclick = async () => {
+      if (!confirm("Delete your entire profile and settings?")) return;
+      await chrome.storage.local.clear();
+      status("All data deleted.", "#f87171");
+      renderProfileView({});
+    };
   }
 }
 
-function initMenu() {
-  const menuBtn = $("menu-btn");
-  const dropdown = $("menu-dropdown");
-  if (!menuBtn || !dropdown) return;
-
-  menuBtn.onclick = (e) => {
-    e.stopPropagation();
-    dropdown.classList.toggle("hidden");
-  };
-  document.addEventListener("click", () => dropdown.classList.add("hidden"));
-  dropdown.onclick = (e) => e.stopPropagation();
+// Tab navigation
+function initTabs() {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      const tabPane = document.getElementById(btn.dataset.tab);
+      if (tabPane) tabPane.classList.add("active");
+      if (btn.dataset.tab === "tab-ai") renderAIPanel();
+      if (btn.dataset.tab === "tab-settings") renderSettings();
+    };
+  });
 }
 
-// ── Init ──
-
+// Initialize
 async function init() {
   initTabs();
-  initUpload();
-  initMenu();
 
   const profile = await getProfile();
   renderProfileView(profile);
-  await updateOnboardingState();
 
-  // Welcome
-  $("welcome-start-btn")?.addEventListener("click", () => {
-    $("welcome-screen").classList.add("hidden");
-    localStorage.setItem("fcv_welcome_dismissed", "1");
-  });
+  // Upload button
+  const parseBtn = document.getElementById("parse-resume");
+  if (parseBtn) {
+    parseBtn.onclick = async () => {
+      const fileInput = document.getElementById("resume-upload");
+      const file = fileInput?.files[0];
+      if (!file) { status("Choose a file first.", "#f87171"); return; }
+      status("Parsing…");
+      try {
+        const text = await extractTextFromFile(file);
+        const parsed = parseResumeText(text);
+        const current = await getProfile();
+        const merged = { ...parsed, ...Object.fromEntries(Object.entries(current).filter(([,v]) => v)) };
+        await setProfile(merged);
+        renderProfileView(merged);
+        status(`Profile updated (${Object.keys(parsed).length} fields found).`, "#4ade80");
+      } catch (err) {
+        status("Parse error: " + err.message, "#f87171");
+      }
+    };
+  }
 
-  // Banner setup
-  $("banner-setup-btn")?.addEventListener("click", () => switchTab("tab-settings"));
+  // Autofill button
+  const autofillBtn = document.getElementById("autofill-btn");
+  if (autofillBtn) {
+    autofillBtn.onclick = async () => {
+      const profileData = await getProfile();
+      if (!Object.keys(profileData).length) {
+        status("No profile. Upload resume first.", "#f87171");
+        return;
+      }
+      chrome.runtime.sendMessage({ type: "TRIGGER_AUTOFILL", profile: profileData });
+      status("Autofilling…");
+    };
+  }
 
-  // API modal
-  $("api-modal-setup")?.addEventListener("click", () => {
-    closeApiKeyModal();
-    switchTab("tab-settings");
-  });
-  $("api-modal-close")?.addEventListener("click", closeApiKeyModal);
-  $("api-modal-overlay")?.addEventListener("click", (e) => {
-    if (e.target === $("api-modal-overlay")) closeApiKeyModal();
-  });
+  // Delete button
+  const deleteBtn = document.getElementById("delete-resume");
+  if (deleteBtn) {
+    deleteBtn.onclick = async () => {
+      if (!confirm("Delete your profile?")) return;
+      await chrome.storage.local.remove("fcv_profile");
+      renderProfileView({});
+      status("Profile deleted.", "#f87171");
+    };
+  }
 
-  // Parse resume (circle upload button)
-  $("parse-resume")?.addEventListener("click", async () => {
-    const fileInput = $("resume-upload");
-    const file = fileInput?.files[0];
-    if (!file) { fileInput?.click(); return; }
-    status("Parsing…", "info");
-    try {
-      const text = await extractTextFromFile(file);
-      const parsed = parseResumeText(text);
-      const current = await getProfile();
-      const merged = { ...parsed, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) };
-      await setProfile(merged);
-      renderProfileView(merged);
-      status(`${Object.keys(parsed).length} fields extracted`, "success");
-      updateOnboardingState();
-    } catch (err) {
-      status("Parse error: " + err.message, "error");
-    }
-  });
-
-  // Autofill
-  $("autofill-btn")?.addEventListener("click", async () => {
-    const profileData = await getProfile();
-    if (!Object.keys(profileData).length) {
-      status("No profile. Upload resume first.", "error");
-      return;
-    }
-    chrome.runtime.sendMessage({ type: "TRIGGER_AUTOFILL", profile: profileData });
-    status("Autofilling…", "info");
-  });
-
-  // Delete profile
-  $("delete-resume")?.addEventListener("click", async () => {
-    if (!confirm("Delete your profile?")) return;
-    await chrome.storage.local.remove("fcv_profile");
-    $("resume-upload").value = "";
-    setFileLabel(null);
-    renderProfileView({});
-    status("Profile deleted.", "error");
-    updateOnboardingState();
-  });
-
-  // Edit modal
-  $("modal-save")?.addEventListener("click", async () => {
-    const key = $("modal-key")?.value;
-    const val = $("modal-input")?.value.trim();
-    if (!key || !val) return;
-    await updateProfile({ [key]: val });
-    closeModal();
-    renderProfileView(await getProfile());
-    status("Updated.", "success");
-  });
-
-  $("modal-close")?.addEventListener("click", closeModal);
-  $("modal-overlay")?.addEventListener("click", (e) => {
-    if (e.target === $("modal-overlay")) closeModal();
-  });
-
-  // Escape to close modals
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
+  // Modal handlers
+  const modalSave = document.getElementById("modal-save");
+  const modalCancel = document.getElementById("modal-cancel");
+  const modalOverlay = document.getElementById("modal-overlay");
+  
+  if (modalSave) {
+    modalSave.onclick = async () => {
+      const key = document.getElementById("modal-key")?.value;
+      const val = document.getElementById("modal-input")?.value.trim();
+      if (!key || !val) return;
+      await updateProfile({ [key]: val });
       closeModal();
-      closeApiKeyModal();
-    }
-  });
+      renderProfileView(await getProfile());
+      status("Updated.", "#4ade80");
+    };
+  }
+  
+  if (modalCancel) modalCancel.onclick = closeModal;
+  if (modalOverlay) {
+    modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
+  }
 
-  // Messages from content script
+  // Listen for messages from content script
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "NEW_FIELD_LEARNED") {
       showLearnBanner(msg.key, msg.value, msg.fieldLabel);
     }
     if (msg.type === "AUTOFILL_DONE") {
-      status(`Filled ${msg.filled}/${msg.total} fields.`, "success");
+      status(`Filled ${msg.filled}/${msg.total} fields.`, "#4ade80");
     }
   });
 }
