@@ -11,6 +11,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.action.setPopup({ tabId, popup: "popup.html" });
     chrome.action.setBadgeText({ tabId, text: "✦" });
     chrome.action.setBadgeBackgroundColor({ tabId, color: "#fdb14c" });
+    sendResponse({ success: true });
     return;
   }
 
@@ -29,15 +30,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.tabs.sendMessage(tabs[0].id, { type: "DO_AUTOFILL", profile: message.profile });
       }
     });
+    sendResponse({ success: true });
     return;
   }
 
   // Content script found new fields after user typed — relay to popup
   if (message.type === "NEW_FIELD_LEARNED") {
     // Broadcast to popup if open
-    chrome.runtime.sendMessage(message).catch(() => {}); // popup may not be open
+    chrome.runtime.sendMessage(message).catch(() => {});
+    sendResponse({ success: true });
     return;
   }
+  
+  return false;
 });
 
 // Clean up closed tabs

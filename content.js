@@ -8,9 +8,6 @@
 (() => {
   "use strict";
 
-  //  Inline stripped copy of matchFieldKey + FIELD_REGISTRY 
-  // (We can't import profile.js directly in MV3 content scripts without bundling)
-
   const FIELD_REGISTRY = {
     full_name:        { patterns: ["name","full name","your name","applicant name"] },
     first_name:       { patterns: ["first name","given name","forename"] },

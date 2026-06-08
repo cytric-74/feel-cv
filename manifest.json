@@ -1,47 +1,68 @@
 {
   "manifest_version": 3,
   "name": "FeelCV",
-  "version": "2.0",
-  "description": "Autofill job applications from your local resume profile.",
-  "permissions": ["storage", "scripting", "activeTab"],
+  "version": "3.0",
+  "description": "AI-powered resume autofill assistant for job applications.",
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "<all_urls>",
+    "https://api.openai.com/*",
+    "https://openrouter.ai/*",
+    "https://api.groq.com/*"
+  ],
+
   "action": {
     "default_popup": "popup.html",
-    "default_icon": "icon.png"
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon48.png"
+    }
   },
+
   "background": {
     "service_worker": "background.js"
   },
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "run_at": "document_idle",
-      "css": ["overlay.css"]
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
     }
   ],
+
   "web_accessible_resources": [
     {
-      "resources": ["pdf.min.js", "pdf.worker.min.js", "mammoth.browser.min.js", "icons/*.svg"],
+      "resources": [
+        "pdf.min.js",
+        "pdf.worker.min.js",
+        "mammoth.browser.min.js",
+        "icons/*.svg",
+        "field_registry.json"
+      ],
       "matches": ["<all_urls>"]
     }
   ],
+
   "icons": {
     "16": "icon.png",
     "48": "icon48.png"
   },
-  "host_permissions": [
-    "http://localhost:11434/",
-    "https://api.groq.com/",
-    "https://openrouter.ai/",
-    "https://api.together.xyz/",
-    "https://api.openai.com/"
-  ],
+
   "browser_specific_settings": {
     "gecko": {
       "id": "feelcv@domainunknown.com",
       "strict_min_version": "109.0"
     }
   },
+
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
   }
