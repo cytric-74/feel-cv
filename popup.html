@@ -1,118 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>FeelCV</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
 
-  <!-- Header -->
   <header class="header">
-    <h1 class="logo">Feel<span class="logo-accent">CV</span></h1>
-    <button id="menu-btn" class="menu-btn" aria-label="Menu">
-      <span></span><span></span><span></span>
-    </button>
-    <div id="menu-dropdown" class="menu-dropdown hidden">
-      <a href="https://github.com/cytric-74" target="_blank" class="menu-item">GitHub</a>
-      <a href="mailto:workatrohh@gmail.com" class="menu-item">Contact</a>
+    <div class="header-main-row">
+      <h1 class="logo">FeelCV</h1>
+      <button id="menu-btn" class="menu-btn" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div id="menu-dropdown" class="menu-dropdown hidden">
+        <a href="https://github.com/cytric-74" target="_blank" class="menu-item">GitHub</a>
+        <a href="mailto:workatrohh@gmail.com" class="menu-item">Contact</a>
+      </div>
+    </div>
+    <div class="header-spec-row">
+      <span class="spec-left">AUTOFILL ASSISTANT</span>
+      <span class="spec-right">LOCAL FIRST</span>
     </div>
   </header>
 
-  <!-- Welcome Screen -->
   <div id="welcome-screen" class="welcome-screen hidden">
     <div class="welcome-content">
-      <h2 class="welcome-title">FeelCV</h2>
+      <h2 class="welcome-title">feelCV</h2>
       <p class="welcome-subtitle">Job applications,<br>automated.</p>
       <div class="welcome-steps">
         <div class="welcome-step" id="welcome-step-1">
           <span class="step-num">1</span>
-          <div>
+          <div class="step-text">
             <strong>Upload resume</strong>
-            <p>PDF, DOCX or TXT</p>
+            <p>PDF, DOCX or TXT files</p>
           </div>
         </div>
         <div class="welcome-step" id="welcome-step-2">
           <span class="step-num">2</span>
-          <div>
-            <strong>Free API key</strong>
-            <p>2 minutes · Groq</p>
+          <div class="step-text">
+            <strong>Configure AI</strong>
+            <p>Local Ollama or API key</p>
           </div>
         </div>
       </div>
-      <button id="welcome-start-btn" class="btn-primary btn-pill full-width">Get Started</button>
+      <button id="welcome-start-btn" class="btn-pill-fill full-width">Get Started</button>
     </div>
   </div>
 
   <main class="main">
+    <div id="status" class="status-msg"></div>
 
-    <!-- tab: Profile -->
     <div id="tab-profile" class="tab-pane active">
 
-      <!-- hero status card -->
       <div class="hero-card" id="hero-card">
-        <div class="hero-main">
-          <div class="hero-stat">
-            <span class="hero-label">Profile</span>
-            <div class="hero-value-row">
-              <span id="hero-field-count" class="hero-value">0</span>
-              <span class="hero-unit">fields</span>
-            </div>
-            <p id="hero-status-text" class="hero-status">Upload your resume to begin</p>
-          </div>
-          <div class="hero-ring" id="hero-ring">
-            <svg viewBox="0 0 64 64" width="64" height="64">
-              <circle cx="32" cy="32" r="28" fill="none" stroke="#2A2A2A" stroke-width="3"/>
-              <circle id="hero-ring-progress" cx="32" cy="32" r="28" fill="none" stroke="#C0FF00" stroke-width="3"
-                stroke-linecap="round" stroke-dasharray="175.93" stroke-dashoffset="175.93"
-                transform="rotate(-90 32 32)"/>
-            </svg>
-            <span id="hero-percent" class="hero-percent">0%</span>
-          </div>
+        <div class="badges-row">
+          <span class="badge badge-accent" id="badge-status">EMPTY PROFILE</span>
+          <span class="badge">SECURE</span>
         </div>
+
+        <h2 class="card-headline" id="card-headline">Supercharge your job applications.</h2>
+        <p class="card-desc" id="card-desc">Upload your resume to extract 28+ professional fields. All processing
+          happens locally on your machine for complete privacy.</p>
+
         <div class="hero-actions">
           <input type="file" id="resume-upload" accept=".pdf,.docx,.txt" hidden>
-          <button id="parse-resume" class="circle-btn" title="Upload & Parse">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-          </button>
-          <label for="resume-upload" class="hero-upload-label" id="upload-drop-zone">
-            <span id="file-name" class="file-name">Drop or click to upload</span>
-          </label>
-          <button id="autofill-btn" class="circle-btn circle-btn-accent" title="Fills job application forms using your profile">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-          </button>
+          <label for="resume-upload" class="btn-pill-fill" id="upload-label">Upload Resume</label>
+          <button id="autofill-btn" class="btn-pill-outline">Autofill Form</button>
         </div>
       </div>
 
-      <!-- Stat cards -->
       <div class="stat-grid">
-        <div class="stat-card" id="stat-api">
-          <svg class="stat-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          <span class="stat-label">API</span>
-          <span id="stat-api-value" class="stat-value">Not set</span>
+        <div class="stat-card stats-specimen">
+          <div class="stat-specimen-large" id="hero-percent">0%</div>
+          <div class="stat-specimen-label">of resume profile fields completed.</div>
+          <div class="stat-specimen-sub" id="hero-field-count-text">0 / 28 fields filled</div>
         </div>
-        <div class="stat-card" id="stat-provider">
-          <svg class="stat-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-          <span class="stat-label">Provider</span>
-          <span id="stat-provider-value" class="stat-value">—</span>
+
+        <div class="stat-card config-specimen" id="config-specimen-card">
+          <div class="config-line">
+            <span class="config-key">PROVIDER</span>
+            <span class="config-val" id="spec-provider">OLLAMA</span>
+          </div>
+          <div class="config-line">
+            <span class="config-key">MODEL</span>
+            <span class="config-val" id="spec-model">LLAMA3.2</span>
+          </div>
+          <div class="config-line">
+            <span class="config-key">STATUS</span>
+            <span class="config-val" id="spec-api">CONNECTED</span>
+          </div>
         </div>
       </div>
 
-      <!-- API banner -->
       <div id="api-key-banner" class="list-row banner-row hidden">
         <div class="list-row-content">
           <span class="list-row-label">AI Features</span>
@@ -121,84 +106,66 @@
         <button id="banner-setup-btn" class="btn-pill-sm">Setup</button>
       </div>
 
-      <div id="status" class="status-msg"></div>
-
-      <!-- Profile fields list -->
       <div class="section-label">Your Data</div>
       <div class="list-container" id="profile-content">
         <div class="empty-state">
-          <p>No profile yet</p>
+          <p>No profile yet. Select a file to begin.</p>
         </div>
       </div>
 
-      <button id="delete-resume" class="text-btn danger-text hidden" title="Delete profile">Delete profile</button>
+      <button id="delete-resume" class="btn-danger-outline hidden">Delete Profile</button>
     </div>
 
-    <!-- Tab: AI Studio -->
     <div id="tab-ai" class="tab-pane">
       <div id="ai-content"></div>
     </div>
 
-    <!-- Tab: Settings -->
     <div id="tab-settings" class="tab-pane">
       <div id="settings-content"></div>
     </div>
 
   </main>
 
-  <!-- Learning queue -->
   <div id="learn-queue"></div>
 
-  <!-- Bottom tab bar -->
   <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="tab-profile">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-        <circle cx="12" cy="7" r="4"/>
-      </svg>
-      <span>Profile</span>
-    </button>
-    <button class="tab-btn" data-tab="tab-ai">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-      </svg>
-      <span>AI</span>
-    </button>
-    <button class="tab-btn" data-tab="tab-settings">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-      </svg>
-      <span>Settings</span>
-    </button>
+    <button class="tab-btn active" data-tab="tab-profile">PROFILE</button>
+    <button class="tab-btn" data-tab="tab-ai">AI STUDIO</button>
+    <button class="tab-btn" data-tab="tab-settings">SETTINGS</button>
   </nav>
 
-  <!-- Edit Modal -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title" id="modal-label">Edit</span>
         <button id="modal-close" class="btn-icon" aria-label="Close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </div>
       <textarea id="modal-input" class="input modal-textarea" rows="4"></textarea>
       <input type="hidden" id="modal-key">
-      <button id="modal-save" class="btn-primary btn-pill full-width">Save</button>
+      <div class="modal-actions">
+        <button id="modal-save" class="btn-pill-fill full-width">Save</button>
+      </div>
     </div>
   </div>
 
-  <!-- API Key Prompt Modal -->
   <div id="api-modal-overlay" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title">API Key</span>
         <button id="api-modal-close" class="btn-icon" aria-label="Close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </div>
       <p class="modal-desc">Add a free API key to enable AI. Stored locally on your device.</p>
-      <button id="api-modal-setup" class="btn-primary btn-pill full-width">Setup →</button>
+      <button id="api-modal-setup" class="btn-pill-fill full-width">Setup →</button>
     </div>
   </div>
 
@@ -206,4 +173,5 @@
   <script src="mammoth.browser.min.js"></script>
   <script src="popup.js"></script>
 </body>
+
 </html>

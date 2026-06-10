@@ -1,5 +1,52 @@
 "use strict";
 
+if (typeof chrome === "undefined" || !chrome.storage) {
+  window.chrome = {
+    storage: {
+      local: {
+        get: (keys, cb) => {
+          const mock = {
+            fcv_profile: {
+              full_name: "John Doe",
+              email: "john.doe@example.com",
+              phone: "+1 234 567 890",
+              location: "New York, NY",
+              skills: "HTML, CSS, JavaScript, React, Node.js",
+              current_company: "Acme Corp",
+              current_role: "Software Engineer",
+              degree: "B.S. in Computer Science"
+            },
+            fcv_filename: "resume.pdf",
+            fcv_provider: {
+              provider: "ollama",
+              apiKey: "",
+              ollamaUrl: "http://localhost:11434",
+              ollamaModel: "llama3.2"
+            }
+          };
+          if (typeof keys === "string") {
+            cb({ [keys]: mock[keys] });
+          } else if (Array.isArray(keys)) {
+            cb(Object.fromEntries(keys.map(k => [k, mock[k]])));
+          } else {
+            cb(mock);
+          }
+        },
+        set: (data, cb) => { if (cb) cb(); },
+        remove: (keys, cb) => { if (cb) cb(); },
+        clear: (cb) => { if (cb) cb(); }
+      }
+    },
+    runtime: {
+      sendMessage: () => {},
+      onMessage: {
+        addListener: () => {}
+      },
+      getURL: (path) => path
+    }
+  };
+}
+
 const FIELD_REGISTRY = {
   full_name:        { label: "Full Name",              patterns: ["name","full name","your name","applicant name"] },
   first_name:       { label: "First Name",             patterns: ["first name","given name","forename"] },
@@ -32,12 +79,10 @@ const FIELD_REGISTRY = {
 
 const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", "achievements", "summary"]);
 
-// Storage helpers
 const getProfile = () => new Promise(r => chrome.storage.local.get("fcv_profile", d => r(d.fcv_profile || {})));
 const setProfile = (p) => new Promise(r => chrome.storage.local.set({ fcv_profile: p }, r));
 const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({...cur, ...patch}); };
 
-// Provider config
 const DEFAULT_CONFIG = {
   provider:      "ollama",
   apiKey:        "",
@@ -56,7 +101,6 @@ const setProviderConfig = (cfg) => new Promise(r =>
   chrome.storage.local.set({ fcv_provider: cfg }, r)
 );
 
-// file extraction
 async function extractTextFromFile(file) {
   const ext = file.name.split(".").pop().toLowerCase();
   if (ext === "txt") return file.text();
@@ -87,7 +131,6 @@ async function extractDOCX(file) {
   return result.value;
 }
 
-// resume parsing
 function parseResumeText(text) {
   const profile = {};
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -104,7 +147,6 @@ function parseResumeText(text) {
   const ghMatch = text.match(/github\.com\/([a-zA-Z0-9\-_%]+)/i);
   if (ghMatch) profile.github = "https://github.com/" + ghMatch[1];
 
-  // name
   for (const line of lines.slice(0, 6)) {
     if (line.length > 2 && line.length < 55 &&
         !line.includes("@") && !line.includes("http") &&
@@ -119,15 +161,12 @@ function parseResumeText(text) {
     }
   }
 
-  // location
   const locMatch = text.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b/);
   if (locMatch) profile.location = locMatch[0];
 
-  // years of experience
   const yoeMatch = text.match(/(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/i);
   if (yoeMatch) profile.years_experience = yoeMatch[1] + "+ years";
 
-  // skills
   const skillsIdx = lines.findIndex(l => /^(skills|technical skills|core competencies)/i.test(l));
   if (skillsIdx !== -1) {
     const skillLines = [];
@@ -138,7 +177,6 @@ function parseResumeText(text) {
     if (skillLines.length) profile.skills = skillLines.join(", ");
   }
 
-  // education
   const eduIdx = lines.findIndex(l => /^(education|academic)/i.test(l));
   if (eduIdx !== -1) {
     for (let i = eduIdx + 1; i < eduIdx + 8 && i < lines.length; i++) {
@@ -152,7 +190,6 @@ function parseResumeText(text) {
     }
   }
 
-  // summary
   const summIdx = lines.findIndex(l => /^(summary|profile|objective|about)/i.test(l));
   if (summIdx !== -1) {
     const summLines = [];
@@ -163,7 +200,6 @@ function parseResumeText(text) {
     if (summLines.length) profile.summary = summLines.join(" ");
   }
 
-  // current company
   const expIdx = lines.findIndex(l => /^(experience|work experience|employment)/i.test(l));
   if (expIdx !== -1) {
     for (let i = expIdx + 1; i < expIdx + 4 && i < lines.length; i++) {
@@ -177,7 +213,6 @@ function parseResumeText(text) {
   return profile;
 }
 
-// AI generation
 function buildPrompt(fieldKey, profile, jobTitle, company) {
   const { email, phone, ...safeProfile } = profile;
   const p = JSON.stringify(safeProfile);
@@ -260,9 +295,8 @@ async function generateWithAI(fieldKey, profile, jobTitle = "", company = "") {
   throw new Error("Unknown provider.");
 }
 
-// DOM helpers
 const $ = id => document.getElementById(id);
-const status = (msg, color = "#38bdf8") => {
+const status = (msg, color = "#FFFFFF") => {
   const statusEl = $("status");
   if (statusEl) {
     statusEl.textContent = msg;
@@ -273,14 +307,92 @@ const status = (msg, color = "#38bdf8") => {
   }
 };
 
-// render profile view
+async function updateProfileStats(profile) {
+  const keys = Object.keys(profile);
+  const filledFields = keys.filter(k => profile[k] && profile[k].trim()).length;
+  const totalFields = Object.keys(FIELD_REGISTRY).length;
+  const percent = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
+
+  const percentEl = document.getElementById("hero-percent");
+  if (percentEl) {
+    percentEl.textContent = `${percent}%`;
+  }
+
+  const countEl = document.getElementById("hero-field-count-text");
+  if (countEl) {
+    countEl.textContent = `${filledFields} / ${totalFields} fields filled`;
+  }
+
+  const welcomeScreen = document.getElementById("welcome-screen");
+  if (welcomeScreen) {
+    if (filledFields === 0) {
+      welcomeScreen.classList.remove("hidden");
+    } else {
+      welcomeScreen.classList.add("hidden");
+    }
+  }
+
+  const badgeStatus = document.getElementById("badge-status");
+  const filename = await new Promise(r => chrome.storage.local.get("fcv_filename", d => r(d.fcv_filename)));
+  if (badgeStatus) {
+    if (filename) {
+      badgeStatus.textContent = filename.toUpperCase();
+      badgeStatus.classList.add("badge-accent");
+    } else {
+      badgeStatus.textContent = "EMPTY PROFILE";
+      badgeStatus.classList.remove("badge-accent");
+    }
+  }
+
+  const cardHeadline = document.getElementById("card-headline");
+  const cardDesc = document.getElementById("card-desc");
+  if (cardHeadline && cardDesc) {
+    if (filledFields > 0) {
+      cardHeadline.textContent = "Profile active and ready.";
+      cardDesc.textContent = "Navigate to any job application form and click 'Autofill Form' to fill details in one click.";
+    } else {
+      cardHeadline.textContent = "Supercharge your job applications.";
+      cardDesc.textContent = "Upload your resume to extract 28+ professional fields. All processing happens locally for complete privacy.";
+    }
+  }
+
+  const deleteBtn = document.getElementById("delete-resume");
+  if (deleteBtn) {
+    if (filledFields > 0) {
+      deleteBtn.classList.remove("hidden");
+    } else {
+      deleteBtn.classList.add("hidden");
+    }
+  }
+
+  const cfg = await getProviderConfig();
+  const specProvider = document.getElementById("spec-provider");
+  const specModel = document.getElementById("spec-model");
+  const specApi = document.getElementById("spec-api");
+  if (specProvider) {
+    specProvider.textContent = cfg.provider === "ollama" ? "OLLAMA (LOCAL)" : "EXTERNAL API";
+  }
+  if (specModel) {
+    specModel.textContent = (cfg.provider === "ollama" ? cfg.ollamaModel : cfg.fallbackModel).toUpperCase();
+  }
+  if (specApi) {
+    specApi.textContent = cfg.provider === "ollama" ? "SECURE (LOCAL)" : (cfg.apiKey ? "SET / SECURE" : "NOT SET");
+    if (cfg.provider === "openai_compat" && !cfg.apiKey) {
+      specApi.style.color = "#FF4444";
+    } else {
+      specApi.style.color = "";
+    }
+  }
+}
+
 function renderProfileView(profile) {
   const keys = Object.keys(profile);
   const container = $("profile-content");
   if (!container) return;
   
   if (!keys.length) {
-    container.innerHTML = `<div class="empty-state">No profile yet. Upload your resume.</div>`;
+    container.innerHTML = `<div class="empty-state">No profile yet. Select a file to begin.</div>`;
+    updateProfileStats({});
     return;
   }
 
@@ -292,7 +404,7 @@ function renderProfileView(profile) {
       <div class="profile-row" data-key="${key}">
         <span class="field-label">${label}</span>
         <span class="field-value" title="${val}">${val.length > 60 ? val.slice(0,57)+"…" : val}</span>
-        <button class="edit-btn" data-key="${key}">✎</button>
+        <button class="edit-btn" data-key="${key}">[ EDIT ]</button>
       </div>`;
   }).join("");
   container.innerHTML = html;
@@ -300,6 +412,8 @@ function renderProfileView(profile) {
   container.querySelectorAll(".edit-btn").forEach(btn => {
     btn.onclick = () => openEditModal(btn.dataset.key, profile[btn.dataset.key]);
   });
+
+  updateProfileStats(profile);
 }
 
 function openEditModal(key, currentValue) {
@@ -315,7 +429,6 @@ function closeModal() {
   $("modal-overlay").style.display = "none";
 }
 
-// learn banner
 function showLearnBanner(key, value, fieldLabel) {
   const banner = document.createElement("div");
   banner.className = "learn-banner";
@@ -334,13 +447,12 @@ function showLearnBanner(key, value, fieldLabel) {
     const v = decodeURIComponent(e.target.dataset.val);
     await updateProfile({ [k]: v });
     banner.remove();
-    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "#4ade80");
+    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "#E1FF00");
     renderProfileView(await getProfile());
   };
   banner.querySelector(".btn-no").onclick = () => banner.remove();
 }
 
-// AI panel
 async function renderAIPanel() {
   const profile = await getProfile();
   const container = $("ai-content");
@@ -359,10 +471,10 @@ async function renderAIPanel() {
     <div class="ai-field-btns">
       ${[...AI_GENERATED_FIELDS].map(k => `
         <button class="ai-gen-btn" data-field="${k}">
-          ${FIELD_REGISTRY[k]?.label || k}
+          ${(FIELD_REGISTRY[k]?.label || k).toUpperCase()}
         </button>`).join("")}
     </div>
-    <div id="ai-result-area" class="ai-result"></div>`;
+    <div id="ai-result-area" class="ai-result hidden"></div>`;
 
   container.querySelectorAll(".ai-gen-btn").forEach(btn => {
     btn.onclick = async () => {
@@ -370,7 +482,11 @@ async function renderAIPanel() {
       const jobTitle = $("ai-job-title")?.value.trim() || "";
       const company  = $("ai-company")?.value.trim() || "";
       const resultArea = $("ai-result-area");
-      if (resultArea) resultArea.textContent = "Generating…";
+      
+      if (resultArea) {
+        resultArea.classList.remove("hidden");
+        resultArea.textContent = "Generating…";
+      }
       btn.disabled = true;
       try {
         const text = await generateWithAI(field, profile, jobTitle, company);
@@ -396,7 +512,6 @@ async function renderAIPanel() {
   });
 }
 
-// Settings panel
 async function renderSettings() {
   const cfg = await getProviderConfig();
   const container = $("settings-content");
@@ -407,8 +522,8 @@ async function renderSettings() {
       <div class="settings-section-title">AI Provider</div>
 
       <div class="provider-toggle">
-        <button class="provider-btn ${cfg.provider === "ollama" ? "active" : ""}" data-p="ollama">🔒 Ollama (Local)</button>
-        <button class="provider-btn ${cfg.provider === "openai_compat" ? "active" : ""}" data-p="openai_compat">☁ External API</button>
+        <button class="provider-btn ${cfg.provider === "ollama" ? "active" : ""}" data-p="ollama">Ollama (Local)</button>
+        <button class="provider-btn ${cfg.provider === "openai_compat" ? "active" : ""}" data-p="openai_compat">External API</button>
       </div>
 
       <div id="ollama-config" class="${cfg.provider !== "ollama" ? "hidden" : ""}">
@@ -422,8 +537,8 @@ async function renderSettings() {
           Pull model: <code>ollama pull llama3.2</code><br>
           Start: <code>ollama serve</code>
         </div>
-        <button id="test-ollama-btn" class="pill-btn secondary" style="margin-top:8px">Test Connection</button>
-        <div id="ollama-test-result" style="font-size:11px;margin-top:6px"></div>
+        <button id="test-ollama-btn" class="pill-btn secondary" style="margin-top:12px;width:100%">Test Connection</button>
+        <div id="ollama-test-result" style="font-size:11px;margin-top:8px;font-weight:700"></div>
       </div>
 
       <div id="ext-config" class="${cfg.provider !== "openai_compat" ? "hidden" : ""}">
@@ -439,20 +554,19 @@ async function renderSettings() {
         </div>
       </div>
 
-      <button id="save-provider-btn" class="pill-btn primary" style="margin-top:10px;width:100%">Save Settings</button>
+      <button id="save-provider-btn" class="pill-btn primary" style="margin-top:16px;width:100%">Save Settings</button>
     </div>
 
     <hr class="divider">
 
     <div class="settings-section">
       <div class="settings-section-title">Profile Data</div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:10px">
         <button id="export-profile-btn" class="pill-btn secondary" style="flex:1">Export JSON</button>
         <button id="nuke-btn"           class="pill-btn danger"    style="flex:1">Delete All</button>
       </div>
     </div>`;
 
-  // Provider toggle
   container.querySelectorAll(".provider-btn").forEach(btn => {
     btn.onclick = () => {
       container.querySelectorAll(".provider-btn").forEach(b => b.classList.remove("active"));
@@ -465,7 +579,6 @@ async function renderSettings() {
     };
   });
 
-  // Test Ollama
   const testBtn = document.getElementById("test-ollama-btn");
   if (testBtn) {
     testBtn.onclick = async () => {
@@ -473,27 +586,26 @@ async function renderSettings() {
       const el = document.getElementById("ollama-test-result");
       if (el) {
         el.textContent = "Testing…";
-        el.style.color = "#888";
+        el.style.color = "#888888";
         try {
           const res = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { signal: AbortSignal.timeout(4000) });
           if (res.ok) {
             const data = await res.json();
             const models = data.models?.map(m => m.name).join(", ") || "none";
             el.textContent = `✓ Connected. Models: ${models}`;
-            el.style.color = "#4ade80";
+            el.style.color = "#E1FF00";
           } else {
             el.textContent = `✗ HTTP ${res.status}`;
-            el.style.color = "#f87171";
+            el.style.color = "#FF4444";
           }
         } catch {
           el.textContent = "✗ Can't reach Ollama. Is it running? (ollama serve)";
-          el.style.color = "#f87171";
+          el.style.color = "#FF4444";
         }
       }
     };
   }
 
-  // Save settings
   const saveBtn = document.getElementById("save-provider-btn");
   if (saveBtn) {
     saveBtn.onclick = async () => {
@@ -507,11 +619,11 @@ async function renderSettings() {
         apiKey:        document.getElementById("ext-api-key")?.value.trim()    || "",
       };
       await setProviderConfig(newCfg);
-      status("Settings saved.", "#4ade80");
+      status("Settings saved.", "#E1FF00");
+      updateProfileStats(await getProfile());
     };
   }
 
-  // Export profile
   const exportBtn = document.getElementById("export-profile-btn");
   if (exportBtn) {
     exportBtn.onclick = async () => {
@@ -524,19 +636,17 @@ async function renderSettings() {
     };
   }
 
-  // Nuke
   const nukeBtn = document.getElementById("nuke-btn");
   if (nukeBtn) {
     nukeBtn.onclick = async () => {
       if (!confirm("Delete your entire profile and settings?")) return;
       await chrome.storage.local.clear();
-      status("All data deleted.", "#f87171");
+      status("All data deleted.", "#FF4444");
       renderProfileView({});
     };
   }
 }
 
-// Tab navigation
 function initTabs() {
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.onclick = () => {
@@ -551,20 +661,17 @@ function initTabs() {
   });
 }
 
-// Initialize
 async function init() {
   initTabs();
 
   const profile = await getProfile();
   renderProfileView(profile);
 
-  // Upload button
-  const parseBtn = document.getElementById("parse-resume");
-  if (parseBtn) {
-    parseBtn.onclick = async () => {
-      const fileInput = document.getElementById("resume-upload");
-      const file = fileInput?.files[0];
-      if (!file) { status("Choose a file first.", "#f87171"); return; }
+  const fileInput = document.getElementById("resume-upload");
+  if (fileInput) {
+    fileInput.onchange = async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
       status("Parsing…");
       try {
         const text = await extractTextFromFile(file);
@@ -572,21 +679,23 @@ async function init() {
         const current = await getProfile();
         const merged = { ...parsed, ...Object.fromEntries(Object.entries(current).filter(([,v]) => v)) };
         await setProfile(merged);
+        await chrome.storage.local.set({ fcv_filename: file.name });
         renderProfileView(merged);
-        status(`Profile updated (${Object.keys(parsed).length} fields found).`, "#4ade80");
+        status(`Profile updated (${Object.keys(parsed).length} fields found).`, "#E1FF00");
+        fileInput.value = "";
       } catch (err) {
-        status("Parse error: " + err.message, "#f87171");
+        status("Parse error: " + err.message, "#FF4444");
+        fileInput.value = "";
       }
     };
   }
 
-  // Autofill button
   const autofillBtn = document.getElementById("autofill-btn");
   if (autofillBtn) {
     autofillBtn.onclick = async () => {
       const profileData = await getProfile();
       if (!Object.keys(profileData).length) {
-        status("No profile. Upload resume first.", "#f87171");
+        status("No profile. Upload resume first.", "#FF4444");
         return;
       }
       chrome.runtime.sendMessage({ type: "TRIGGER_AUTOFILL", profile: profileData });
@@ -594,20 +703,18 @@ async function init() {
     };
   }
 
-  // Delete button
   const deleteBtn = document.getElementById("delete-resume");
   if (deleteBtn) {
     deleteBtn.onclick = async () => {
       if (!confirm("Delete your profile?")) return;
-      await chrome.storage.local.remove("fcv_profile");
+      await chrome.storage.local.remove(["fcv_profile", "fcv_filename"]);
       renderProfileView({});
-      status("Profile deleted.", "#f87171");
+      status("Profile deleted.", "#FF4444");
     };
   }
 
-  // Modal handlers
   const modalSave = document.getElementById("modal-save");
-  const modalCancel = document.getElementById("modal-cancel");
+  const modalClose = document.getElementById("modal-close");
   const modalOverlay = document.getElementById("modal-overlay");
   
   if (modalSave) {
@@ -618,22 +725,29 @@ async function init() {
       await updateProfile({ [key]: val });
       closeModal();
       renderProfileView(await getProfile());
-      status("Updated.", "#4ade80");
+      status("Updated.", "#E1FF00");
     };
   }
   
-  if (modalCancel) modalCancel.onclick = closeModal;
+  if (modalClose) modalClose.onclick = closeModal;
   if (modalOverlay) {
     modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
   }
 
-  // Listen for messages from content script
+  const welcomeStartBtn = document.getElementById("welcome-start-btn");
+  if (welcomeStartBtn) {
+    welcomeStartBtn.onclick = () => {
+      const welcomeScreen = document.getElementById("welcome-screen");
+      if (welcomeScreen) welcomeScreen.classList.add("hidden");
+    };
+  }
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "NEW_FIELD_LEARNED") {
       showLearnBanner(msg.key, msg.value, msg.fieldLabel);
     }
     if (msg.type === "AUTOFILL_DONE") {
-      status(`Filled ${msg.filled}/${msg.total} fields.`, "#4ade80");
+      status(`Filled ${msg.filled}/${msg.total} fields.`, "#E1FF00");
     }
   });
 }
