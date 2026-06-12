@@ -1,62 +1,79 @@
-# AI-Powered Job Application Assistant
+# FeelCV
 
-An intelligent browser extension that automates the process of parsing your resume and auto-filling job application forms using AI.
+An intelligent, secure, and local-first browser extension that automates parsing resumes and autofilling job application forms using AI.
 
 ---
 
 ## Features
 
-- **Resume Parsing**  
-  Upload `.pdf`, `.docx`, or `.txt` resumes. Structured data is extracted using OpenAI/Gemini.
+- **Local & Secure Resume Parsing**  
+  Upload `.pdf`, `.docx`, or `.txt` resumes. Your profile data is extracted locally and stored on your device using Chrome storage.
 
-- **Smart Auto-Fill**  
-  Detects and fills form fields on job portals using HTML structure and AI-enhanced mapping.
+- **Dynamic Autofill**  
+  Heuristically detects job application forms on any web page. In one click, autofill all 28+ supported professional fields.
 
-- **Cross-Browser Support**  
-  Works on Chrome, Firefox, and Safari.
+- **Interactive AI Studio**  
+  Generate customized, job-specific cover letters, motivation letters, summaries, strengths, and achievements using AI.
 
-- **Dark Mode UI**  
-  Clean, responsive popup interface with real-time feedback and status indicators.
+- **Local or Cloud AI Providers**  
+  Supports local LLMs via Ollama (defaulting to Llama 3.2) or any OpenAI-compatible external API endpoint (like Groq, OpenRouter, or Together AI).
+
+- **Modern JetBrains Mono UI**  
+  Clean, responsive dark-mode dashboard with real-time status indication, field completion statistics, and safe manual editing.
 
 ---
-## Preview 
-![here](preview.gif)
+
+## Folder Structure
+
+```
+├── manifest.json            # Manifest V3 extension configuration
+├── popup.html               # Popup interface HTML structure
+├── popup.js                 # Popup logic, profile management, and AI integration
+├── popup.css                # Pure CSS dark-mode styling for popup
+├── content.js               # Content script for form detection and autofilling
+├── overlay.css              # Styling for the page banner injected by content script
+├── background.js            # Service worker handling runtime messaging and badge states
+├── pdf.min.js               # Local PDF parsing library
+├── pdf.worker.min.js        # Web worker for PDF.js parsing
+├── mammoth.browser.min.js   # Local DOCX text extraction library
+└── icons/                   # Directory containing extension icons
+```
+
+---
 
 ## Installation
 
-1. Clone this repository:
+1. Clone or download this repository to your local machine:
    ```bash
-   git clone https://github.com/yourusername/job-assistant-extension.git
-2. Add your own OpenAI API key to the script. Your key should be add in popup.js assigning it to the variable named "OPENAI_API_KEY".
+   git clone https://github.com/cytric-74/feel-cv.git
+   ```
 
-3. Load the extension:
+2. Load the extension in Chrome:
+   - Navigate to `chrome://extensions/` in your browser.
+   - Toggle **Developer mode** in the top-right corner.
+   - Click **Load unpacked** in the top-left corner.
+   - Select the root folder of this project.
 
-    - Open chrome://extensions/
-    - Enable Developer mode
-    - Click Load unpacked and select the project folder
+---
 
-## Technologies Used
+## Configuration
 
-    - JavaScript (ES6+)
-    - OpenAI GPT / Gemini API
-    - PDF.js, Mammoth.js
-    - Chrome Extension APIs
-    - Tailwind CSS (for UI)
+FeelCV is designed to be local-first, ensuring complete privacy:
 
-## File supported 
+### 1. Local AI (Recommended)
+By default, FeelCV connects to a local Ollama instance:
+- Install Ollama from [ollama.com](https://ollama.com).
+- Serve Ollama on your machine:
+  ```bash
+  ollama serve
+  ```
+- Pull your preferred model (e.g. Llama 3.2):
+  ```bash
+  ollama pull llama3.2
+  ```
 
-.pdf | .docx | .txt
-
-
-## Folder Structer 
-```
-├── popup.html        # UI for the popup
-├── popup.js          # Main extension logic
-├── styles.css        # TailwindCSS for styling
-├── background.js     # For form-filling in content scripts
-├── manifest.json     # Chrome extension config
-├── utils/            # Utility functions for parsing, validation
-├── screenshots/      # Demo images
-└── README.md
-
-```
+### 2. External API
+If you prefer a cloud provider:
+- Toggle the provider to **External API** in the FeelCV Settings tab.
+- Enter your Base URL, Model Name, and API Key.
+- Your keys are saved securely in your browser's local storage and never sent elsewhere.
