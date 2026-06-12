@@ -32,17 +32,17 @@ An intelligent, secure, and local-first browser extension that automates parsing
 ## Folder Structure
 
 ```
-├── manifest.json            # Manifest V3 extension configuration
-├── popup.html               # Popup interface HTML structure
-├── popup.js                 # Popup logic, profile management, and AI integration
-├── popup.css                # Pure CSS dark-mode styling for popup
-├── content.js               # Content script for form detection and autofilling
-├── overlay.css              # Styling for the page banner injected by content script
-├── background.js            # Service worker handling runtime messaging and badge states
-├── pdf.min.js               # Local PDF parsing library
-├── pdf.worker.min.js        # Web worker for PDF.js parsing
-├── mammoth.browser.min.js   # Local DOCX text extraction library
-└── icons/                   # Directory containing extension icons
+├── manifest.json            
+├── popup.html               
+├── popup.js                 
+├── popup.css                
+├── content.js               
+├── overlay.css              
+├── background.js            
+├── pdf.min.js               
+├── pdf.worker.min.js        
+├── mammoth.browser.min.js   
+└── icons/                   
 ```
 
 ---
