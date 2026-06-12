@@ -4,6 +4,12 @@ An intelligent, secure, and local-first browser extension that automates parsing
 
 ---
 
+## Preview
+
+![FeelCV Preview](preview.gif)
+
+---
+
 ## Features
 
 - **Local & Secure Resume Parsing**  
