@@ -305,6 +305,8 @@ body {
   justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1.5px solid #222222;
+  --profile-label-width: 120px;
+  --profile-btn-width: 60px;
 }
 
 .profile-row:last-child {
@@ -315,18 +317,20 @@ body {
   font-size: 10px;
   color: #555555;
   font-weight: 700;
-  width: 30%;
+  width: var(--profile-label-width);
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .field-value {
   font-size: 12px;
   color: #FFFFFF;
   font-weight: 500;
-  width: 55%;
+  flex-grow: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-right: 8px;
 }
 
 .edit-btn {
@@ -337,6 +341,10 @@ body {
   font-size: 10px;
   font-weight: 700;
   padding: 4px;
+  width: var(--profile-btn-width);
+  white-space: nowrap;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .btn-danger-outline {

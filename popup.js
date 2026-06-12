@@ -390,27 +390,45 @@ function renderProfileView(profile) {
   const container = $("profile-content");
   if (!container) return;
 
+  container.textContent = "";
+
   if (!keys.length) {
-    container.innerHTML = `<div class="empty-state">No profile yet. Select a file to begin.</div>`;
+    const emptyState = document.createElement("div");
+    emptyState.className = "empty-state";
+    emptyState.textContent = "No profile yet. Select a file to begin.";
+    container.appendChild(emptyState);
     updateProfileStats({});
     return;
   }
 
-  const html = keys.map(key => {
+  keys.forEach(key => {
     const meta = FIELD_REGISTRY[key];
     const label = meta?.label || key;
-    const val = profile[key];
-    return `
-      <div class="profile-row" data-key="${key}">
-        <span class="field-label">${label}</span>
-        <span class="field-value" title="${val}">${val.length > 60 ? val.slice(0, 57) + "…" : val}</span>
-        <button class="edit-btn" data-key="${key}">[ EDIT ]</button>
-      </div>`;
-  }).join("");
-  container.innerHTML = html;
+    const val = profile[key] || "";
 
-  container.querySelectorAll(".edit-btn").forEach(btn => {
-    btn.onclick = () => openEditModal(btn.dataset.key, profile[btn.dataset.key]);
+    const row = document.createElement("div");
+    row.className = "profile-row";
+    row.dataset.key = key;
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "field-label";
+    labelSpan.textContent = label;
+
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "field-value";
+    valueSpan.title = val;
+    valueSpan.textContent = val.length > 60 ? val.slice(0, 57) + "…" : val;
+
+    const btn = document.createElement("button");
+    btn.className = "edit-btn";
+    btn.dataset.key = key;
+    btn.textContent = "[ EDIT ]";
+    btn.onclick = () => openEditModal(key, val);
+
+    row.appendChild(labelSpan);
+    row.appendChild(valueSpan);
+    row.appendChild(btn);
+    container.appendChild(row);
   });
 
   updateProfileStats(profile);
@@ -421,36 +439,51 @@ function openEditModal(key, currentValue) {
   $("modal-label").textContent = meta?.label || key;
   $("modal-input").value = currentValue || "";
   $("modal-key").value = key;
-  $("modal-overlay").style.display = "flex";
+  $("modal-overlay").classList.remove("hidden");
   $("modal-input").focus();
 }
 
 function closeModal() {
-  $("modal-overlay").style.display = "none";
+  $("modal-overlay").classList.add("hidden");
 }
 
 function showLearnBanner(key, value, fieldLabel) {
   const banner = document.createElement("div");
   banner.className = "learn-banner";
-  banner.innerHTML = `
-    <span>💡 Learn "<b>${fieldLabel}</b>"?</span>
-    <div class="learn-val">${value.slice(0, 80)}${value.length > 80 ? "…" : ""}</div>
-    <div class="learn-btns">
-      <button class="btn-yes" data-key="${key}" data-val="${encodeURIComponent(value)}">Save</button>
-      <button class="btn-no">Dismiss</button>
-    </div>`;
-  const queue = $("learn-queue");
-  if (queue) queue.prepend(banner);
 
-  banner.querySelector(".btn-yes").onclick = async (e) => {
-    const k = e.target.dataset.key;
-    const v = decodeURIComponent(e.target.dataset.val);
-    await updateProfile({ [k]: v });
+  const titleSpan = document.createElement("span");
+  titleSpan.textContent = `💡 Learn "${fieldLabel}"?`;
+  banner.appendChild(titleSpan);
+
+  const valDiv = document.createElement("div");
+  valDiv.className = "learn-val";
+  valDiv.textContent = value.slice(0, 80) + (value.length > 80 ? "…" : "");
+  banner.appendChild(valDiv);
+
+  const btnsDiv = document.createElement("div");
+  btnsDiv.className = "learn-btns";
+
+  const btnYes = document.createElement("button");
+  btnYes.className = "btn-yes";
+  btnYes.textContent = "Save";
+  btnYes.onclick = async () => {
+    await updateProfile({ [key]: value });
     banner.remove();
-    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "#FF8030");
+    status("Learned: " + (FIELD_REGISTRY[key]?.label || key), "#FF8030");
     renderProfileView(await getProfile());
   };
-  banner.querySelector(".btn-no").onclick = () => banner.remove();
+
+  const btnNo = document.createElement("button");
+  btnNo.className = "btn-no";
+  btnNo.textContent = "Dismiss";
+  btnNo.onclick = () => banner.remove();
+
+  btnsDiv.appendChild(btnYes);
+  btnsDiv.appendChild(btnNo);
+  banner.appendChild(btnsDiv);
+
+  const queue = $("learn-queue");
+  if (queue) queue.prepend(banner);
 }
 
 async function renderAIPanel() {
@@ -459,57 +492,85 @@ async function renderAIPanel() {
   if (!container) return;
 
   if (!Object.keys(profile).length) {
-    container.innerHTML = `<div class="empty-state">Upload your resume first.</div>`;
+    container.textContent = "";
+    const emptyState = document.createElement("div");
+    emptyState.className = "empty-state";
+    emptyState.textContent = "Upload your resume first.";
+    container.appendChild(emptyState);
     return;
   }
 
-  container.innerHTML = `
-    <div class="ai-form">
-      <input id="ai-job-title" placeholder="Job title (e.g. Frontend Engineer)" class="ai-input" />
-      <input id="ai-company"   placeholder="Company name (optional)" class="ai-input" />
-    </div>
-    <div class="ai-field-btns">
-      ${[...AI_GENERATED_FIELDS].map(k => `
-        <button class="ai-gen-btn" data-field="${k}">
-          ${(FIELD_REGISTRY[k]?.label || k).toUpperCase()}
-        </button>`).join("")}
-    </div>
-    <div id="ai-result-area" class="ai-result hidden"></div>`;
+  container.textContent = "";
 
-  container.querySelectorAll(".ai-gen-btn").forEach(btn => {
+  const aiForm = document.createElement("div");
+  aiForm.className = "ai-form";
+
+  const jobTitleInput = document.createElement("input");
+  jobTitleInput.id = "ai-job-title";
+  jobTitleInput.placeholder = "Job title (e.g. Frontend Engineer)";
+  jobTitleInput.className = "ai-input";
+
+  const companyInput = document.createElement("input");
+  companyInput.id = "ai-company";
+  companyInput.placeholder = "Company name (optional)";
+  companyInput.className = "ai-input";
+
+  aiForm.appendChild(jobTitleInput);
+  aiForm.appendChild(companyInput);
+  container.appendChild(aiForm);
+
+  const fieldBtns = document.createElement("div");
+  fieldBtns.className = "ai-field-btns";
+
+  const resultArea = document.createElement("div");
+  resultArea.id = "ai-result-area";
+  resultArea.className = "ai-result hidden";
+
+  AI_GENERATED_FIELDS.forEach(k => {
+    const btn = document.createElement("button");
+    btn.className = "ai-gen-btn";
+    btn.textContent = (FIELD_REGISTRY[k]?.label || k).toUpperCase();
     btn.onclick = async () => {
-      const field = btn.dataset.field;
-      const jobTitle = $("ai-job-title")?.value.trim() || "";
-      const company = $("ai-company")?.value.trim() || "";
-      const resultArea = $("ai-result-area");
+      const jobTitle = jobTitleInput.value.trim();
+      const company = companyInput.value.trim();
 
-      if (resultArea) {
-        resultArea.classList.remove("hidden");
-        resultArea.textContent = "Generating…";
-      }
+      resultArea.classList.remove("hidden");
+      resultArea.textContent = "Generating…";
       btn.disabled = true;
       try {
-        const text = await generateWithAI(field, profile, jobTitle, company);
-        if (resultArea) {
-          resultArea.innerHTML = `
-            <div class="result-label">${FIELD_REGISTRY[field]?.label}</div>
-            <div class="result-text">${text.replace(/</g, "&lt;")}</div>
-            <button id="copy-result" class="copy-btn">Copy</button>`;
-          const copyBtn = $("copy-result");
-          if (copyBtn) {
-            copyBtn.onclick = () => {
-              navigator.clipboard.writeText(text);
-              copyBtn.textContent = "Copied!";
-              setTimeout(() => { if (copyBtn) copyBtn.textContent = "Copy"; }, 1500);
-            };
-          }
-        }
+        const text = await generateWithAI(k, profile, jobTitle, company);
+        resultArea.textContent = "";
+
+        const label = document.createElement("div");
+        label.className = "result-label";
+        label.textContent = FIELD_REGISTRY[k]?.label;
+
+        const textDiv = document.createElement("div");
+        textDiv.className = "result-text";
+        textDiv.textContent = text;
+
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.textContent = "Copy";
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(text);
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+        };
+
+        resultArea.appendChild(label);
+        resultArea.appendChild(textDiv);
+        resultArea.appendChild(copyBtn);
       } catch (err) {
-        if (resultArea) resultArea.textContent = "Error: " + err.message;
+        resultArea.textContent = "Error: " + err.message;
       }
       btn.disabled = false;
     };
+    fieldBtns.appendChild(btn);
   });
+
+  container.appendChild(fieldBtns);
+  container.appendChild(resultArea);
 }
 
 async function renderSettings() {
@@ -517,134 +578,246 @@ async function renderSettings() {
   const container = $("settings-content");
   if (!container) return;
 
-  container.innerHTML = `
-    <div class="settings-section">
-      <div class="settings-section-title">AI Provider</div>
+  container.textContent = "";
 
-      <div class="provider-toggle">
-        <button class="provider-btn ${cfg.provider === "ollama" ? "active" : ""}" data-p="ollama">Ollama (Local)</button>
-        <button class="provider-btn ${cfg.provider === "openai_compat" ? "active" : ""}" data-p="openai_compat">External API</button>
-      </div>
+  const section1 = document.createElement("div");
+  section1.className = "settings-section";
 
-      <div id="ollama-config" class="${cfg.provider !== "ollama" ? "hidden" : ""}">
-        <div class="privacy-badge">✦ Your data never leaves your device</div>
-        <label class="settings-label">Ollama URL</label>
-        <input id="ollama-url"   class="ai-input" value="${cfg.ollamaUrl}" placeholder="http://localhost:11434" />
-        <label class="settings-label">Model</label>
-        <input id="ollama-model" class="ai-input" value="${cfg.ollamaModel}" placeholder="llama3.2" />
-        <div class="settings-hint">
-          Install: <code>brew install ollama</code> or <a href="https://ollama.com" target="_blank">ollama.com</a><br>
-          Pull model: <code>ollama pull llama3.2</code><br>
-          Start: <code>ollama serve</code>
-        </div>
-        <button id="test-ollama-btn" class="pill-btn secondary" style="margin-top:12px;width:100%">Test Connection</button>
-        <div id="ollama-test-result" style="font-size:11px;margin-top:8px;font-weight:700"></div>
-      </div>
+  const title1 = document.createElement("div");
+  title1.className = "settings-section-title";
+  title1.textContent = "AI Provider";
+  section1.appendChild(title1);
 
-      <div id="ext-config" class="${cfg.provider !== "openai_compat" ? "hidden" : ""}">
-        <div class="privacy-badge warn">⚠ Profile data will be sent externally</div>
-        <label class="settings-label">Base URL</label>
-        <input id="fallback-url"   class="ai-input" value="${cfg.fallbackUrl}" placeholder="https://api.groq.com/openai/v1" />
-        <label class="settings-label">Model</label>
-        <input id="fallback-model" class="ai-input" value="${cfg.fallbackModel}" placeholder="llama-3.1-8b-instant" />
-        <label class="settings-label">API Key</label>
-        <input id="ext-api-key" type="password" class="ai-input" value="${cfg.apiKey}" placeholder="sk-..." />
-        <div class="settings-hint">
-          Works with: Groq · OpenRouter · Together · OpenAI · any OpenAI-compatible endpoint.
-        </div>
-      </div>
+  const toggle = document.createElement("div");
+  toggle.className = "provider-toggle";
 
-      <button id="save-provider-btn" class="pill-btn primary" style="margin-top:16px;width:100%">Save Settings</button>
-    </div>
+  const btnOllama = document.createElement("button");
+  btnOllama.className = "provider-btn" + (cfg.provider === "ollama" ? " active" : "");
+  btnOllama.textContent = "Ollama (Local)";
 
-    <hr class="divider">
+  const btnExt = document.createElement("button");
+  btnExt.className = "provider-btn" + (cfg.provider === "openai_compat" ? " active" : "");
+  btnExt.textContent = "External API";
 
-    <div class="settings-section">
-      <div class="settings-section-title">Profile Data</div>
-      <div style="display:flex;gap:10px">
-        <button id="export-profile-btn" class="pill-btn secondary" style="flex:1">Export JSON</button>
-        <button id="nuke-btn"           class="pill-btn danger"    style="flex:1">Delete All</button>
-      </div>
-    </div>`;
+  toggle.appendChild(btnOllama);
+  toggle.appendChild(btnExt);
+  section1.appendChild(toggle);
 
-  container.querySelectorAll(".provider-btn").forEach(btn => {
-    btn.onclick = () => {
-      container.querySelectorAll(".provider-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      const p = btn.dataset.p;
-      const ollamaDiv = document.getElementById("ollama-config");
-      const extDiv = document.getElementById("ext-config");
-      if (ollamaDiv) ollamaDiv.classList.toggle("hidden", p !== "ollama");
-      if (extDiv) extDiv.classList.toggle("hidden", p !== "openai_compat");
-    };
-  });
+  const ollamaDiv = document.createElement("div");
+  ollamaDiv.className = cfg.provider !== "ollama" ? "hidden" : "";
 
-  const testBtn = document.getElementById("test-ollama-btn");
-  if (testBtn) {
-    testBtn.onclick = async () => {
-      const url = document.getElementById("ollama-url")?.value.trim() || "http://localhost:11434";
-      const el = document.getElementById("ollama-test-result");
-      if (el) {
-        el.textContent = "Testing…";
-        el.style.color = "#888888";
-        try {
-          const res = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { signal: AbortSignal.timeout(4000) });
-          if (res.ok) {
-            const data = await res.json();
-            const models = data.models?.map(m => m.name).join(", ") || "none";
-            el.textContent = `✓ Connected. Models: ${models}`;
-            el.style.color = "#FF8030";
-          } else {
-            el.textContent = `✗ HTTP ${res.status}`;
-            el.style.color = "#FF4444";
-          }
-        } catch {
-          el.textContent = "✗ Can't reach Ollama. Is it running? (ollama serve)";
-          el.style.color = "#FF4444";
-        }
+  const badgePrivacy = document.createElement("div");
+  badgePrivacy.className = "privacy-badge";
+  badgePrivacy.textContent = "✦ Your data never leaves your device";
+  ollamaDiv.appendChild(badgePrivacy);
+
+  const labelUrl = document.createElement("label");
+  labelUrl.className = "settings-label";
+  labelUrl.textContent = "Ollama URL";
+  ollamaDiv.appendChild(labelUrl);
+
+  const inputUrl = document.createElement("input");
+  inputUrl.id = "ollama-url";
+  inputUrl.className = "ai-input";
+  inputUrl.value = cfg.ollamaUrl;
+  inputUrl.placeholder = "http://localhost:11434";
+  ollamaDiv.appendChild(inputUrl);
+
+  const labelModel = document.createElement("label");
+  labelModel.className = "settings-label";
+  labelModel.textContent = "Model";
+  ollamaDiv.appendChild(labelModel);
+
+  const inputModel = document.createElement("input");
+  inputModel.id = "ollama-model";
+  inputModel.className = "ai-input";
+  inputModel.value = cfg.ollamaModel;
+  inputModel.placeholder = "llama3.2";
+  ollamaDiv.appendChild(inputModel);
+
+  const hintOllama = document.createElement("div");
+  hintOllama.className = "settings-hint";
+  hintOllama.textContent = "Install: brew install ollama or ollama.com\nPull model: ollama pull llama3.2\nStart: ollama serve";
+  ollamaDiv.appendChild(hintOllama);
+
+  const testBtn = document.createElement("button");
+  testBtn.id = "test-ollama-btn";
+  testBtn.className = "pill-btn secondary";
+  testBtn.style.marginTop = "12px";
+  testBtn.style.width = "100%";
+  testBtn.textContent = "Test Connection";
+  ollamaDiv.appendChild(testBtn);
+
+  const testResult = document.createElement("div");
+  testResult.id = "ollama-test-result";
+  testResult.style.fontSize = "11px";
+  testResult.style.marginTop = "8px";
+  testResult.style.fontWeight = "700";
+  ollamaDiv.appendChild(testResult);
+
+  section1.appendChild(ollamaDiv);
+
+  const extDiv = document.createElement("div");
+  extDiv.className = cfg.provider !== "openai_compat" ? "hidden" : "";
+
+  const badgeWarn = document.createElement("div");
+  badgeWarn.className = "privacy-badge warn";
+  badgeWarn.textContent = "⚠ Profile data will be sent externally";
+  extDiv.appendChild(badgeWarn);
+
+  const labelFallbackUrl = document.createElement("label");
+  labelFallbackUrl.className = "settings-label";
+  labelFallbackUrl.textContent = "Base URL";
+  extDiv.appendChild(labelFallbackUrl);
+
+  const inputFallbackUrl = document.createElement("input");
+  inputFallbackUrl.id = "fallback-url";
+  inputFallbackUrl.className = "ai-input";
+  inputFallbackUrl.value = cfg.fallbackUrl;
+  inputFallbackUrl.placeholder = "https://api.groq.com/openai/v1";
+  extDiv.appendChild(inputFallbackUrl);
+
+  const labelFallbackModel = document.createElement("label");
+  labelFallbackModel.className = "settings-label";
+  labelFallbackModel.textContent = "Model";
+  extDiv.appendChild(labelFallbackModel);
+
+  const inputFallbackModel = document.createElement("input");
+  inputFallbackModel.id = "fallback-model";
+  inputFallbackModel.className = "ai-input";
+  inputFallbackModel.value = cfg.fallbackModel;
+  inputFallbackModel.placeholder = "llama-3.1-8b-instant";
+  extDiv.appendChild(inputFallbackModel);
+
+  const labelApiKey = document.createElement("label");
+  labelApiKey.className = "settings-label";
+  labelApiKey.textContent = "API Key";
+  extDiv.appendChild(labelApiKey);
+
+  const inputApiKey = document.createElement("input");
+  inputApiKey.id = "ext-api-key";
+  inputApiKey.type = "password";
+  inputApiKey.className = "ai-input";
+  inputApiKey.value = cfg.apiKey;
+  inputApiKey.placeholder = "sk-...";
+  extDiv.appendChild(inputApiKey);
+
+  const hintExt = document.createElement("div");
+  hintExt.className = "settings-hint";
+  hintExt.textContent = "Works with: Groq · OpenRouter · Together · OpenAI · any OpenAI-compatible endpoint.";
+  extDiv.appendChild(hintExt);
+
+  section1.appendChild(extDiv);
+
+  const saveBtn = document.createElement("button");
+  saveBtn.id = "save-provider-btn";
+  saveBtn.className = "pill-btn primary";
+  saveBtn.style.marginTop = "16px";
+  saveBtn.style.width = "100%";
+  saveBtn.textContent = "Save Settings";
+  section1.appendChild(saveBtn);
+
+  container.appendChild(section1);
+
+  const hr = document.createElement("hr");
+  hr.className = "divider";
+  container.appendChild(hr);
+
+  const section2 = document.createElement("div");
+  section2.className = "settings-section";
+
+  const title2 = document.createElement("div");
+  title2.className = "settings-section-title";
+  title2.textContent = "Profile Data";
+  section2.appendChild(title2);
+
+  const flexDiv = document.createElement("div");
+  flexDiv.style.display = "flex";
+  flexDiv.style.gap = "10px";
+
+  const exportBtn = document.createElement("button");
+  exportBtn.id = "export-profile-btn";
+  exportBtn.className = "pill-btn secondary";
+  exportBtn.style.flex = "1";
+  exportBtn.textContent = "Export JSON";
+
+  const nukeBtn = document.createElement("button");
+  nukeBtn.id = "nuke-btn";
+  nukeBtn.className = "pill-btn danger";
+  nukeBtn.style.flex = "1";
+  nukeBtn.textContent = "Delete All";
+
+  flexDiv.appendChild(exportBtn);
+  flexDiv.appendChild(nukeBtn);
+  section2.appendChild(flexDiv);
+
+  container.appendChild(section2);
+
+  btnOllama.onclick = () => {
+    btnOllama.classList.add("active");
+    btnExt.classList.remove("active");
+    ollamaDiv.classList.remove("hidden");
+    extDiv.classList.add("hidden");
+  };
+
+  btnExt.onclick = () => {
+    btnOllama.classList.remove("active");
+    btnExt.classList.add("active");
+    ollamaDiv.classList.add("hidden");
+    extDiv.classList.remove("hidden");
+  };
+
+  testBtn.onclick = async () => {
+    const url = inputUrl.value.trim() || "http://localhost:11434";
+    testResult.textContent = "Testing…";
+    testResult.style.color = "#888888";
+    try {
+      const res = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const data = await res.json();
+        const models = data.models?.map(m => m.name).join(", ") || "none";
+        testResult.textContent = `✓ Connected. Models: ${models}`;
+        testResult.style.color = "#FF8030";
+      } else {
+        testResult.textContent = `✗ HTTP ${res.status}`;
+        testResult.style.color = "#FF4444";
       }
-    };
-  }
+    } catch {
+      testResult.textContent = "✗ Can't reach Ollama. Is it running? (ollama serve)";
+      testResult.style.color = "#FF4444";
+    }
+  };
 
-  const saveBtn = document.getElementById("save-provider-btn");
-  if (saveBtn) {
-    saveBtn.onclick = async () => {
-      const activeProv = container.querySelector(".provider-btn.active")?.dataset.p || "ollama";
-      const newCfg = {
-        provider: activeProv,
-        ollamaUrl: document.getElementById("ollama-url")?.value.trim() || DEFAULT_CONFIG.ollamaUrl,
-        ollamaModel: document.getElementById("ollama-model")?.value.trim() || DEFAULT_CONFIG.ollamaModel,
-        fallbackUrl: document.getElementById("fallback-url")?.value.trim() || DEFAULT_CONFIG.fallbackUrl,
-        fallbackModel: document.getElementById("fallback-model")?.value.trim() || DEFAULT_CONFIG.fallbackModel,
-        apiKey: document.getElementById("ext-api-key")?.value.trim() || "",
-      };
-      await setProviderConfig(newCfg);
-      status("Settings saved.", "#FF8030");
-      updateProfileStats(await getProfile());
+  saveBtn.onclick = async () => {
+    const activeProv = btnOllama.classList.contains("active") ? "ollama" : "openai_compat";
+    const newCfg = {
+      provider: activeProv,
+      ollamaUrl: inputUrl.value.trim() || DEFAULT_CONFIG.ollamaUrl,
+      ollamaModel: inputModel.value.trim() || DEFAULT_CONFIG.ollamaModel,
+      fallbackUrl: inputFallbackUrl.value.trim() || DEFAULT_CONFIG.fallbackUrl,
+      fallbackModel: inputFallbackModel.value.trim() || DEFAULT_CONFIG.fallbackModel,
+      apiKey: inputApiKey.value.trim() || "",
     };
-  }
+    await setProviderConfig(newCfg);
+    status("Settings saved.", "#FF8030");
+    updateProfileStats(await getProfile());
+  };
 
-  const exportBtn = document.getElementById("export-profile-btn");
-  if (exportBtn) {
-    exportBtn.onclick = async () => {
-      const profile = await getProfile();
-      const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = Object.assign(document.createElement("a"), { href: url, download: "feelcv-profile.json" });
-      a.click();
-      URL.revokeObjectURL(url);
-    };
-  }
+  exportBtn.onclick = async () => {
+    const profile = await getProfile();
+    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement("a"), { href: url, download: "feelcv-profile.json" });
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const nukeBtn = document.getElementById("nuke-btn");
-  if (nukeBtn) {
-    nukeBtn.onclick = async () => {
-      if (!confirm("Delete your entire profile and settings?")) return;
-      await chrome.storage.local.clear();
-      status("All data deleted.", "#FF4444");
-      renderProfileView({});
-    };
-  }
+  nukeBtn.onclick = async () => {
+    if (!confirm("Delete your entire profile and settings?")) return;
+    await chrome.storage.local.clear();
+    status("All data deleted.", "#FF4444");
+    renderProfileView({});
+  };
 }
 
 function initTabs() {
@@ -720,8 +893,8 @@ async function init() {
   if (modalSave) {
     modalSave.onclick = async () => {
       const key = document.getElementById("modal-key")?.value;
-      const val = document.getElementById("modal-input")?.value.trim();
-      if (!key || !val) return;
+      const val = document.getElementById("modal-input")?.value.trim() || "";
+      if (!key) return;
       await updateProfile({ [key]: val });
       closeModal();
       renderProfileView(await getProfile());

@@ -239,26 +239,42 @@
 
     const banner = document.createElement("div");
     banner.id = "fcv-banner";
-    banner.innerHTML = `
-      <span class="fcv-icon">✦</span>
-      <span class="fcv-text">FeelCV detected a job form</span>
-      <button class="fcv-btn" id="fcv-fill-btn">Autofill</button>
-      <button class="fcv-close" id="fcv-close-btn">✕</button>
-    `;
+
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "fcv-icon";
+    iconSpan.textContent = "✦";
+    banner.appendChild(iconSpan);
+
+    const textSpan = document.createElement("span");
+    textSpan.className = "fcv-text";
+    textSpan.textContent = "FeelCV detected a job form";
+    banner.appendChild(textSpan);
+
+    const fillBtn = document.createElement("button");
+    fillBtn.className = "fcv-btn";
+    fillBtn.id = "fcv-fill-btn";
+    fillBtn.textContent = "Autofill";
+    banner.appendChild(fillBtn);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "fcv-close";
+    closeBtn.id = "fcv-close-btn";
+    closeBtn.textContent = "✕";
+    banner.appendChild(closeBtn);
+
     document.body.appendChild(banner);
 
-    document.getElementById("fcv-close-btn").onclick = () => banner.remove();
-    document.getElementById("fcv-fill-btn").onclick = async () => {
+    closeBtn.onclick = () => banner.remove();
+    fillBtn.onclick = async () => {
       const profile = await getProfile();
       if (!Object.keys(profile).length) {
-        banner.querySelector(".fcv-text").textContent = "No profile found. Upload your resume first.";
+        textSpan.textContent = "No profile found. Upload your resume first.";
         return;
       }
       const result = doAutofill(profile);
       const fields = discoverFields();
       watchForLearning(fields);
-      banner.querySelector(".fcv-text").textContent =
-        `Filled ${result.filled} of ${result.total} fields`;
+      textSpan.textContent = `Filled ${result.filled} of ${result.total} fields`;
       setTimeout(() => banner.remove(), 3000);
     };
   }
