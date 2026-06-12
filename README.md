@@ -20,7 +20,7 @@ An intelligent browser extension that automates the process of parsing your resu
 
 ---
 ## Preview 
-![here](preview.png)
+![here](preview.gif)
 
 ## Installation
 
