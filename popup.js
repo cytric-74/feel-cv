@@ -38,9 +38,9 @@ if (typeof chrome === "undefined" || !chrome.storage) {
       }
     },
     runtime: {
-      sendMessage: () => {},
+      sendMessage: () => { },
       onMessage: {
-        addListener: () => {}
+        addListener: () => { }
       },
       getURL: (path) => path
     }
@@ -48,47 +48,47 @@ if (typeof chrome === "undefined" || !chrome.storage) {
 }
 
 const FIELD_REGISTRY = {
-  full_name:        { label: "Full Name",              patterns: ["name","full name","your name","applicant name"] },
-  first_name:       { label: "First Name",             patterns: ["first name","given name","forename"] },
-  last_name:        { label: "Last Name",              patterns: ["last name","surname","family name"] },
-  email:            { label: "Email",                  patterns: ["email","e-mail","mail","email address"] },
-  phone:            { label: "Phone",                  patterns: ["phone","mobile","cell","telephone","contact number"] },
-  location:         { label: "Location / City",        patterns: ["city","location","address","where are you based","current location"] },
-  linkedin:         { label: "LinkedIn URL",           patterns: ["linkedin","linkedin url","linkedin profile"] },
-  github:           { label: "GitHub URL",             patterns: ["github","github url","portfolio","website","personal site"] },
-  portfolio:        { label: "Portfolio URL",          patterns: ["portfolio","website","personal site","personal url"] },
-  summary:          { label: "About / Summary",        patterns: ["summary","about yourself","about you","brief bio","profile summary","professional summary","tell us about yourself","short bio","bio","describe yourself"] },
-  headline:         { label: "Professional Headline",  patterns: ["headline","title","job title","current role","current position","designation"] },
-  years_experience: { label: "Years of Experience",   patterns: ["years of experience","total experience","how many years","work experience"] },
-  current_company:  { label: "Current Employer",      patterns: ["current company","current employer","current organization","employer"] },
-  current_role:     { label: "Current Job Title",     patterns: ["current role","current position","current title","current designation"] },
-  work_history:     { label: "Work History",           patterns: ["work history","employment history","past experience","previous companies"] },
-  degree:           { label: "Degree",                 patterns: ["degree","qualification","education","highest qualification","academic qualification"] },
-  university:       { label: "University / College",   patterns: ["university","college","institution","school","alma mater"] },
-  graduation_year:  { label: "Graduation Year",        patterns: ["graduation year","year of graduation","passed out","batch"] },
-  major:            { label: "Field of Study",         patterns: ["major","field of study","specialization","stream","branch","course"] },
-  skills:           { label: "Skills",                 patterns: ["skills","technologies","tech stack","tools","expertise","competencies","technical skills"] },
-  languages:        { label: "Programming Languages",  patterns: ["programming languages","languages known","coding languages"] },
-  cover_letter:     { label: "Cover Letter",           patterns: ["cover letter","why should we hire","motivation letter","statement of purpose"] },
-  motivation:       { label: "Why this role / company",patterns: ["why do you want","why are you interested","why this company","why this role","what attracts you","what interests you","reason for applying"] },
-  strengths:        { label: "Key Strengths",          patterns: ["strengths","greatest strengths","what are your strengths","key strengths"] },
-  achievements:     { label: "Achievements",           patterns: ["achievements","accomplishments","notable projects","key projects","proud of"] },
-  salary:           { label: "Expected Salary",        patterns: ["expected salary","salary expectation","ctc","expected ctc","compensation"] },
-  notice_period:    { label: "Notice Period",          patterns: ["notice period","when can you join","availability","how soon"] },
+  full_name: { label: "Full Name", patterns: ["name", "full name", "your name", "applicant name"] },
+  first_name: { label: "First Name", patterns: ["first name", "given name", "forename"] },
+  last_name: { label: "Last Name", patterns: ["last name", "surname", "family name"] },
+  email: { label: "Email", patterns: ["email", "e-mail", "mail", "email address"] },
+  phone: { label: "Phone", patterns: ["phone", "mobile", "cell", "telephone", "contact number"] },
+  location: { label: "Location / City", patterns: ["city", "location", "address", "where are you based", "current location"] },
+  linkedin: { label: "LinkedIn URL", patterns: ["linkedin", "linkedin url", "linkedin profile"] },
+  github: { label: "GitHub URL", patterns: ["github", "github url", "portfolio", "website", "personal site"] },
+  portfolio: { label: "Portfolio URL", patterns: ["portfolio", "website", "personal site", "personal url"] },
+  summary: { label: "About / Summary", patterns: ["summary", "about yourself", "about you", "brief bio", "profile summary", "professional summary", "tell us about yourself", "short bio", "bio", "describe yourself"] },
+  headline: { label: "Professional Headline", patterns: ["headline", "title", "job title", "current role", "current position", "designation"] },
+  years_experience: { label: "Years of Experience", patterns: ["years of experience", "total experience", "how many years", "work experience"] },
+  current_company: { label: "Current Employer", patterns: ["current company", "current employer", "current organization", "employer"] },
+  current_role: { label: "Current Job Title", patterns: ["current role", "current position", "current title", "current designation"] },
+  work_history: { label: "Work History", patterns: ["work history", "employment history", "past experience", "previous companies"] },
+  degree: { label: "Degree", patterns: ["degree", "qualification", "education", "highest qualification", "academic qualification"] },
+  university: { label: "University / College", patterns: ["university", "college", "institution", "school", "alma mater"] },
+  graduation_year: { label: "Graduation Year", patterns: ["graduation year", "year of graduation", "passed out", "batch"] },
+  major: { label: "Field of Study", patterns: ["major", "field of study", "specialization", "stream", "branch", "course"] },
+  skills: { label: "Skills", patterns: ["skills", "technologies", "tech stack", "tools", "expertise", "competencies", "technical skills"] },
+  languages: { label: "Programming Languages", patterns: ["programming languages", "languages known", "coding languages"] },
+  cover_letter: { label: "Cover Letter", patterns: ["cover letter", "why should we hire", "motivation letter", "statement of purpose"] },
+  motivation: { label: "Why this role / company", patterns: ["why do you want", "why are you interested", "why this company", "why this role", "what attracts you", "what interests you", "reason for applying"] },
+  strengths: { label: "Key Strengths", patterns: ["strengths", "greatest strengths", "what are your strengths", "key strengths"] },
+  achievements: { label: "Achievements", patterns: ["achievements", "accomplishments", "notable projects", "key projects", "proud of"] },
+  salary: { label: "Expected Salary", patterns: ["expected salary", "salary expectation", "ctc", "expected ctc", "compensation"] },
+  notice_period: { label: "Notice Period", patterns: ["notice period", "when can you join", "availability", "how soon"] },
 };
 
 const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", "achievements", "summary"]);
 
 const getProfile = () => new Promise(r => chrome.storage.local.get("fcv_profile", d => r(d.fcv_profile || {})));
 const setProfile = (p) => new Promise(r => chrome.storage.local.set({ fcv_profile: p }, r));
-const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({...cur, ...patch}); };
+const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({ ...cur, ...patch }); };
 
 const DEFAULT_CONFIG = {
-  provider:      "ollama",
-  apiKey:        "",
-  ollamaUrl:     "http://localhost:11434",
-  ollamaModel:   "llama3.2",
-  fallbackUrl:   "https://api.groq.com/openai/v1",
+  provider: "ollama",
+  apiKey: "",
+  ollamaUrl: "http://localhost:11434",
+  ollamaModel: "llama3.2",
+  fallbackUrl: "https://api.groq.com/openai/v1",
   fallbackModel: "llama-3.1-8b-instant",
 };
 
@@ -149,13 +149,13 @@ function parseResumeText(text) {
 
   for (const line of lines.slice(0, 6)) {
     if (line.length > 2 && line.length < 55 &&
-        !line.includes("@") && !line.includes("http") &&
-        !line.match(/^\d/) && /[A-Z]/.test(line[0])) {
+      !line.includes("@") && !line.includes("http") &&
+      !line.match(/^\d/) && /[A-Z]/.test(line[0])) {
       profile.full_name = line;
       const parts = line.trim().split(/\s+/);
       if (parts.length >= 2) {
         profile.first_name = parts[0];
-        profile.last_name  = parts[parts.length - 1];
+        profile.last_name = parts[parts.length - 1];
       }
       break;
     }
@@ -217,13 +217,13 @@ function buildPrompt(fieldKey, profile, jobTitle, company) {
   const { email, phone, ...safeProfile } = profile;
   const p = JSON.stringify(safeProfile);
   const role = jobTitle || "this role";
-  const co   = company  || "this company";
+  const co = company || "this company";
   const prompts = {
-    motivation:   `Write a concise, genuine 2-3 sentence answer to "Why do you want to work at ${co} as ${role}?" based on this profile: ${p}. Be specific, avoid clichés. Output only the answer text.`,
+    motivation: `Write a concise, genuine 2-3 sentence answer to "Why do you want to work at ${co} as ${role}?" based on this profile: ${p}. Be specific, avoid clichés. Output only the answer text.`,
     cover_letter: `Write a short professional cover letter (150-200 words) for the role of ${role} at ${co} based on this profile: ${p}. Output only the letter body.`,
-    strengths:    `Write 2-3 specific professional strengths in 1-2 sentences based on this profile: ${p}. No bullet points, no preamble.`,
+    strengths: `Write 2-3 specific professional strengths in 1-2 sentences based on this profile: ${p}. No bullet points, no preamble.`,
     achievements: `Summarise 2-3 key achievements from this profile in 1-2 sentences: ${p}. Use numbers/metrics where the profile supports it.`,
-    summary:      `Write a crisp 2-3 sentence professional summary based on this profile: ${p}. No buzzwords. Output only the summary.`,
+    summary: `Write a crisp 2-3 sentence professional summary based on this profile: ${p}. No buzzwords. Output only the summary.`,
   };
   return prompts[fieldKey] || `Generate a short answer for the field "${fieldKey}" from this profile: ${p}. Output only the answer.`;
 }
@@ -234,7 +234,7 @@ async function callOllama(prompt, cfg) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model:  cfg.ollamaModel,
+      model: cfg.ollamaModel,
       prompt,
       stream: false,
       options: { num_predict: 400, temperature: 0.7 }
@@ -255,11 +255,11 @@ async function callOpenAICompat(prompt, cfg) {
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      "Content-Type":  "application/json",
+      "Content-Type": "application/json",
       "Authorization": `Bearer ${cfg.apiKey}`,
     },
     body: JSON.stringify({
-      model:      cfg.fallbackModel,
+      model: cfg.fallbackModel,
       max_tokens: 400,
       temperature: 0.7,
       messages: [{ role: "user", content: prompt }]
@@ -274,7 +274,7 @@ async function callOpenAICompat(prompt, cfg) {
 }
 
 async function generateWithAI(fieldKey, profile, jobTitle = "", company = "") {
-  const cfg    = await getProviderConfig();
+  const cfg = await getProviderConfig();
   const prompt = buildPrompt(fieldKey, profile, jobTitle, company);
 
   if (cfg.provider === "ollama") {
@@ -389,7 +389,7 @@ function renderProfileView(profile) {
   const keys = Object.keys(profile);
   const container = $("profile-content");
   if (!container) return;
-  
+
   if (!keys.length) {
     container.innerHTML = `<div class="empty-state">No profile yet. Select a file to begin.</div>`;
     updateProfileStats({});
@@ -403,7 +403,7 @@ function renderProfileView(profile) {
     return `
       <div class="profile-row" data-key="${key}">
         <span class="field-label">${label}</span>
-        <span class="field-value" title="${val}">${val.length > 60 ? val.slice(0,57)+"…" : val}</span>
+        <span class="field-value" title="${val}">${val.length > 60 ? val.slice(0, 57) + "…" : val}</span>
         <button class="edit-btn" data-key="${key}">[ EDIT ]</button>
       </div>`;
   }).join("");
@@ -434,7 +434,7 @@ function showLearnBanner(key, value, fieldLabel) {
   banner.className = "learn-banner";
   banner.innerHTML = `
     <span>💡 Learn "<b>${fieldLabel}</b>"?</span>
-    <div class="learn-val">${value.slice(0,80)}${value.length > 80 ? "…" : ""}</div>
+    <div class="learn-val">${value.slice(0, 80)}${value.length > 80 ? "…" : ""}</div>
     <div class="learn-btns">
       <button class="btn-yes" data-key="${key}" data-val="${encodeURIComponent(value)}">Save</button>
       <button class="btn-no">Dismiss</button>
@@ -447,7 +447,7 @@ function showLearnBanner(key, value, fieldLabel) {
     const v = decodeURIComponent(e.target.dataset.val);
     await updateProfile({ [k]: v });
     banner.remove();
-    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "#E1FF00");
+    status("Learned: " + (FIELD_REGISTRY[k]?.label || k), "#FF8030");
     renderProfileView(await getProfile());
   };
   banner.querySelector(".btn-no").onclick = () => banner.remove();
@@ -457,7 +457,7 @@ async function renderAIPanel() {
   const profile = await getProfile();
   const container = $("ai-content");
   if (!container) return;
-  
+
   if (!Object.keys(profile).length) {
     container.innerHTML = `<div class="empty-state">Upload your resume first.</div>`;
     return;
@@ -478,11 +478,11 @@ async function renderAIPanel() {
 
   container.querySelectorAll(".ai-gen-btn").forEach(btn => {
     btn.onclick = async () => {
-      const field    = btn.dataset.field;
+      const field = btn.dataset.field;
       const jobTitle = $("ai-job-title")?.value.trim() || "";
-      const company  = $("ai-company")?.value.trim() || "";
+      const company = $("ai-company")?.value.trim() || "";
       const resultArea = $("ai-result-area");
-      
+
       if (resultArea) {
         resultArea.classList.remove("hidden");
         resultArea.textContent = "Generating…";
@@ -500,7 +500,7 @@ async function renderAIPanel() {
             copyBtn.onclick = () => {
               navigator.clipboard.writeText(text);
               copyBtn.textContent = "Copied!";
-              setTimeout(() => { if(copyBtn) copyBtn.textContent = "Copy"; }, 1500);
+              setTimeout(() => { if (copyBtn) copyBtn.textContent = "Copy"; }, 1500);
             };
           }
         }
@@ -593,7 +593,7 @@ async function renderSettings() {
             const data = await res.json();
             const models = data.models?.map(m => m.name).join(", ") || "none";
             el.textContent = `✓ Connected. Models: ${models}`;
-            el.style.color = "#E1FF00";
+            el.style.color = "#FF8030";
           } else {
             el.textContent = `✗ HTTP ${res.status}`;
             el.style.color = "#FF4444";
@@ -611,15 +611,15 @@ async function renderSettings() {
     saveBtn.onclick = async () => {
       const activeProv = container.querySelector(".provider-btn.active")?.dataset.p || "ollama";
       const newCfg = {
-        provider:      activeProv,
-        ollamaUrl:     document.getElementById("ollama-url")?.value.trim()     || DEFAULT_CONFIG.ollamaUrl,
-        ollamaModel:   document.getElementById("ollama-model")?.value.trim()   || DEFAULT_CONFIG.ollamaModel,
-        fallbackUrl:   document.getElementById("fallback-url")?.value.trim()   || DEFAULT_CONFIG.fallbackUrl,
+        provider: activeProv,
+        ollamaUrl: document.getElementById("ollama-url")?.value.trim() || DEFAULT_CONFIG.ollamaUrl,
+        ollamaModel: document.getElementById("ollama-model")?.value.trim() || DEFAULT_CONFIG.ollamaModel,
+        fallbackUrl: document.getElementById("fallback-url")?.value.trim() || DEFAULT_CONFIG.fallbackUrl,
         fallbackModel: document.getElementById("fallback-model")?.value.trim() || DEFAULT_CONFIG.fallbackModel,
-        apiKey:        document.getElementById("ext-api-key")?.value.trim()    || "",
+        apiKey: document.getElementById("ext-api-key")?.value.trim() || "",
       };
       await setProviderConfig(newCfg);
-      status("Settings saved.", "#E1FF00");
+      status("Settings saved.", "#FF8030");
       updateProfileStats(await getProfile());
     };
   }
@@ -677,11 +677,11 @@ async function init() {
         const text = await extractTextFromFile(file);
         const parsed = parseResumeText(text);
         const current = await getProfile();
-        const merged = { ...parsed, ...Object.fromEntries(Object.entries(current).filter(([,v]) => v)) };
+        const merged = { ...parsed, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) };
         await setProfile(merged);
         await chrome.storage.local.set({ fcv_filename: file.name });
         renderProfileView(merged);
-        status(`Profile updated (${Object.keys(parsed).length} fields found).`, "#E1FF00");
+        status(`Profile updated (${Object.keys(parsed).length} fields found).`, "#FF8030");
         fileInput.value = "";
       } catch (err) {
         status("Parse error: " + err.message, "#FF4444");
@@ -716,7 +716,7 @@ async function init() {
   const modalSave = document.getElementById("modal-save");
   const modalClose = document.getElementById("modal-close");
   const modalOverlay = document.getElementById("modal-overlay");
-  
+
   if (modalSave) {
     modalSave.onclick = async () => {
       const key = document.getElementById("modal-key")?.value;
@@ -725,10 +725,10 @@ async function init() {
       await updateProfile({ [key]: val });
       closeModal();
       renderProfileView(await getProfile());
-      status("Updated.", "#E1FF00");
+      status("Updated.", "#FF8030");
     };
   }
-  
+
   if (modalClose) modalClose.onclick = closeModal;
   if (modalOverlay) {
     modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
@@ -747,7 +747,7 @@ async function init() {
       showLearnBanner(msg.key, msg.value, msg.fieldLabel);
     }
     if (msg.type === "AUTOFILL_DONE") {
-      status(`Filled ${msg.filled}/${msg.total} fields.`, "#E1FF00");
+      status(`Filled ${msg.filled}/${msg.total} fields.`, "#FF8030");
     }
   });
 }
