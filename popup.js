@@ -110,9 +110,15 @@ async function extractTextFromFile(file) {
 }
 
 async function extractPDF(file) {
-  const pdfjsLib = window["pdfjs-dist/build/pdf"];
-  if (!pdfjsLib) throw new Error("pdf.js not loaded");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL("pdf.worker.min.js");
+  const pdfjsLib = window.pdfjsLib || window["pdfjs-dist/build/pdf"];
+  if (!pdfjsLib) {
+    throw new Error("pdf.js library is not loaded. Please ensure that pdf.min.js and pdf.worker.min.js exist in the extension folder and that you have run the download script.");
+  }
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL("pdf.worker.min.js");
+  } catch (err) {
+    console.warn("Could not set PDF worker source URL, relying on inline worker:", err);
+  }
   const ab = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
   let text = "";

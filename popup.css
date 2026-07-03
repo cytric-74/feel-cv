@@ -66,7 +66,7 @@ body {
 }
 
 .menu-btn:hover span {
-  background: #D4FF00;
+  background: #FF8030;
 }
 
 .menu-dropdown {
@@ -94,7 +94,7 @@ body {
 
 .menu-item:hover {
   background: rgba(225, 255, 0, 0.08);
-  color: #D4FF00;
+  color: #FF8030;
 }
 
 .header-spec-row {
@@ -155,7 +155,7 @@ body {
 }
 
 .badge-accent {
-  background: #D4FF00;
+  background: #FF8030;
   color: #000000;
 }
 
@@ -197,8 +197,8 @@ body {
 }
 
 .btn-pill-fill:hover {
-  background: #D4FF00;
-  border-color: #D4FF00;
+  background: #FF8030;
+  border-color: #FF8030;
 }
 
 .btn-pill-outline {
@@ -217,8 +217,8 @@ body {
 }
 
 .btn-pill-outline:hover {
-  color: #D4FF00;
-  border-color: #D4FF00;
+  color: #FF8030;
+  border-color: #FF8030;
 }
 
 .stat-grid {
@@ -336,7 +336,7 @@ body {
 .edit-btn {
   background: none;
   border: none;
-  color: #D4FF00;
+  color: #FF8030;
   cursor: pointer;
   font-size: 10px;
   font-weight: 700;
@@ -384,7 +384,7 @@ body {
 }
 
 .ai-input:focus {
-  border-color: #D4FF00;
+  border-color: #FF8030;
 }
 
 .ai-field-btns {
@@ -407,8 +407,8 @@ body {
 }
 
 .ai-gen-btn:hover {
-  border-color: #D4FF00;
-  color: #D4FF00;
+  border-color: #FF8030;
+  color: #FF8030;
 }
 
 .ai-gen-btn:disabled {
@@ -425,7 +425,7 @@ body {
 
 .result-label {
   font-size: 10px;
-  color: #D4FF00;
+  color: #FF8030;
   font-weight: 700;
   margin-bottom: 8px;
   text-transform: uppercase;
@@ -452,8 +452,8 @@ body {
 }
 
 .copy-btn:hover {
-  background: #D4FF00;
-  border-color: #D4FF00;
+  background: #FF8030;
+  border-color: #FF8030;
 }
 
 .settings-section {
@@ -465,7 +465,7 @@ body {
 
 .settings-section-title {
   font-size: 11px;
-  color: #D4FF00;
+  color: #FF8030;
   font-weight: 700;
   text-transform: uppercase;
   margin-bottom: 14px;
@@ -497,8 +497,8 @@ body {
 }
 
 .provider-btn:hover {
-  border-color: #D4FF00;
-  color: #D4FF00;
+  border-color: #FF8030;
+  color: #FF8030;
 }
 
 .settings-label {
@@ -518,7 +518,7 @@ body {
 }
 
 .settings-hint a {
-  color: #D4FF00;
+  color: #FF8030;
   text-decoration: none;
 }
 
@@ -547,8 +547,8 @@ body {
 }
 
 .pill-btn.primary:hover {
-  background: #D4FF00;
-  border-color: #D4FF00;
+  background: #FF8030;
+  border-color: #FF8030;
 }
 
 .pill-btn.secondary {
@@ -558,8 +558,8 @@ body {
 }
 
 .pill-btn.secondary:hover {
-  border-color: #D4FF00;
-  color: #D4FF00;
+  border-color: #FF8030;
+  color: #FF8030;
 }
 
 .pill-btn.danger {
@@ -579,7 +579,7 @@ body {
   padding: 4px 8px;
   border-radius: 100px;
   margin-bottom: 12px;
-  background: #D4FF00;
+  background: #FF8030;
   color: #000000;
 }
 
@@ -618,8 +618,8 @@ body {
 }
 
 .tab-btn:hover {
-  border-color: #D4FF00;
-  color: #D4FF00;
+  border-color: #FF8030;
+  color: #FF8030;
 }
 
 .tab-btn.active {
@@ -682,8 +682,8 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1.5px solid #D4FF00;
-  color: #D4FF00;
+  border: 1.5px solid #FF8030;
+  color: #FF8030;
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
@@ -718,7 +718,7 @@ body {
 
 .learn-banner {
   border: 1.5px solid #222222;
-  border-left: 3px solid #D4FF00;
+  border-left: 3px solid #FF8030;
   background: #181818;
   border-radius: 14px;
   padding: 12px 14px;
@@ -757,8 +757,8 @@ body {
 }
 
 .learn-btns .btn-yes:hover {
-  background: #D4FF00;
-  border-color: #D4FF00;
+  background: #FF8030;
+  border-color: #FF8030;
 }
 
 .learn-btns .btn-no:hover {
