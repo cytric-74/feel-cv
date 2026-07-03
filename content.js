@@ -58,7 +58,7 @@
 
   // job page detection (heuristic, local)
 
-  function isJobPage() {
+  function hasJobContext() {
     const url = location.href.toLowerCase();
     const title = document.title.toLowerCase();
     const body = document.body.innerText.toLowerCase().slice(0, 3000);
@@ -74,13 +74,18 @@
     ].filter(s => body.includes(s)).length;
 
     const formSignals = (() => {
-      const inputs = document.querySelectorAll("input, textarea, select");
       const labels = [...document.querySelectorAll("label")].map(l => l.innerText.toLowerCase());
       const jobLabels = ["resume","cv","cover letter","linkedin","work experience","skills"];
       return jobLabels.filter(j => labels.some(l => l.includes(j))).length;
     })();
 
     return urlSignals || contentSignals >= 2 || formSignals >= 2;
+  }
+
+  function hasJobForm() {
+    const fields = discoverFields();
+    const hasFileInput = document.querySelector("input[type=file]") !== null;
+    return fields.length >= 2 || (fields.length >= 1 && hasFileInput);
   }
 
   /**
@@ -292,10 +297,53 @@
   });
 
 
-  if (isJobPage()) {
-    chrome.runtime.sendMessage({ type: "JOB_PAGE_DETECTED" });
-    // Small delay to let page fully render
-    setTimeout(showAutofillBanner, 1200);
+  let detectionObserver = null;
+
+  function tryDetectAndShowBanner() {
+    if (bannerShown) return;
+
+    if (hasJobContext() && hasJobForm()) {
+      bannerShown = true;
+      if (detectionObserver) {
+        detectionObserver.disconnect();
+        detectionObserver = null;
+      }
+      chrome.runtime.sendMessage({ type: "JOB_PAGE_DETECTED" });
+      setTimeout(showAutofillBanner, 500);
+    }
   }
+
+  function initDetection() {
+    if (!hasJobContext()) return;
+
+    // Check immediately
+    tryDetectAndShowBanner();
+
+    if (bannerShown) return;
+
+    // Set up MutationObserver to detect dynamically loaded forms
+    let timeout = null;
+    detectionObserver = new MutationObserver(() => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        tryDetectAndShowBanner();
+      }, 500);
+    });
+
+    detectionObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // Cleanup observer after 20 seconds to release resources
+    setTimeout(() => {
+      if (detectionObserver) {
+        detectionObserver.disconnect();
+        detectionObserver = null;
+      }
+    }, 20000);
+  }
+
+  initDetection();
 
 })();
