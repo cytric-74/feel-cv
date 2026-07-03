@@ -325,7 +325,8 @@ async function updateProfileStats(profile) {
 
   const welcomeScreen = document.getElementById("welcome-screen");
   if (welcomeScreen) {
-    if (filledFields === 0) {
+    const dismissed = await new Promise(r => chrome.storage.local.get("fcv_welcome_dismissed", d => r(d.fcv_welcome_dismissed)));
+    if (filledFields === 0 && !dismissed) {
       welcomeScreen.classList.remove("hidden");
     } else {
       welcomeScreen.classList.add("hidden");
@@ -800,7 +801,8 @@ async function renderSettings() {
     };
     await setProviderConfig(newCfg);
     status("Settings saved.", "#FF8030");
-    updateProfileStats(await getProfile());
+    await updateProfileStats(await getProfile());
+    switchTab("tab-profile");
   };
 
   exportBtn.onclick = async () => {
@@ -820,16 +822,75 @@ async function renderSettings() {
   };
 }
 
+function switchTab(tabId) {
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    if (b.dataset.tab === tabId) {
+      b.classList.add("active");
+    } else {
+      b.classList.remove("active");
+    }
+  });
+  document.querySelectorAll(".tab-pane").forEach(p => {
+    if (p.id === tabId) {
+      p.classList.add("active");
+    } else {
+      p.classList.remove("active");
+    }
+  });
+  if (tabId === "tab-ai") renderAIPanel();
+  if (tabId === "tab-settings") renderSettings();
+}
+
+async function parseResumeWithAI(resumeText) {
+  const cfg = await getProviderConfig();
+  const prompt = `You are a professional resume parser. Extract structured details from the following resume text.
+Format the output STRICTLY as a JSON object with the following keys. Do NOT wrap the JSON inside markdown code blocks (like \`\`\`json) and do not provide any explanation, preamble, or trailing text. Output ONLY the JSON string.
+
+Expected JSON Keys:
+- full_name
+- first_name
+- last_name
+- location
+- headline
+- years_experience
+- current_company
+- current_role
+- work_history
+- degree
+- university
+- graduation_year
+- major
+- skills
+- languages
+
+Resume text:
+${resumeText}`;
+
+  let responseText = "";
+  if (cfg.provider === "ollama") {
+    responseText = await callOllama(prompt, cfg);
+  } else if (cfg.provider === "openai_compat") {
+    responseText = await callOpenAICompat(prompt, cfg);
+  } else {
+    throw new Error("No AI provider configured");
+  }
+
+  let jsonText = responseText.trim();
+  if (jsonText.startsWith("```")) {
+    jsonText = jsonText.replace(/^```(json)?/, "").replace(/```$/, "").trim();
+  }
+  const startIdx = jsonText.indexOf("{");
+  const endIdx = jsonText.lastIndexOf("}");
+  if (startIdx !== -1 && endIdx !== -1) {
+    jsonText = jsonText.slice(startIdx, endIdx + 1);
+  }
+  return JSON.parse(jsonText);
+}
+
 function initTabs() {
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.onclick = () => {
-      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-      btn.classList.add("active");
-      const tabPane = document.getElementById(btn.dataset.tab);
-      if (tabPane) tabPane.classList.add("active");
-      if (btn.dataset.tab === "tab-ai") renderAIPanel();
-      if (btn.dataset.tab === "tab-settings") renderSettings();
+      switchTab(btn.dataset.tab);
     };
   });
 }
@@ -845,16 +906,60 @@ async function init() {
     fileInput.onchange = async () => {
       const file = fileInput.files[0];
       if (!file) return;
-      status("Parsing…");
+      status("Reading file…");
       try {
         const text = await extractTextFromFile(file);
-        const parsed = parseResumeText(text);
+        
+        // Phase 1: Instant regex parsing for basic/contact info
+        const parsedRegex = parseResumeText(text);
+        let merged = { ...parsedRegex };
+        
+        // Save initial regex parsing immediately so the UI updates fast
         const current = await getProfile();
-        const merged = { ...parsed, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) };
+        merged = { ...merged, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) };
         await setProfile(merged);
         await chrome.storage.local.set({ fcv_filename: file.name });
-        renderProfileView(merged);
-        status(`Profile updated (${Object.keys(parsed).length} fields found).`, "#FF8030");
+        await renderProfileView(merged);
+        status("Regex parsed. Checking AI connection…", "#FF8030");
+
+        // Phase 2: Asynchronous AI Extraction
+        try {
+          const cfg = await getProviderConfig();
+          const isOllama = cfg.provider === "ollama";
+          const hasApiKey = cfg.provider === "openai_compat" && cfg.apiKey;
+          
+          if (isOllama || hasApiKey) {
+            status("Extracting profile with AI…");
+            const parsedAI = await parseResumeWithAI(text);
+            
+            const cleanedAI = {};
+            for (const key of Object.keys(parsedAI)) {
+              if (FIELD_REGISTRY[key] && parsedAI[key]) {
+                cleanedAI[key] = String(parsedAI[key]).trim();
+              }
+            }
+
+            const currentProfile = await getProfile();
+            const contactKeys = ["email", "phone", "linkedin", "github", "portfolio"];
+            const finalProfile = { ...currentProfile };
+
+            for (const key of Object.keys(cleanedAI)) {
+              if (!contactKeys.includes(key) || !finalProfile[key]) {
+                finalProfile[key] = cleanedAI[key];
+              }
+            }
+
+            await setProfile(finalProfile);
+            await renderProfileView(finalProfile);
+            status("Profile fully extracted with AI!", "#FF8030");
+          } else {
+            status("Parsed basic fields. Setup AI for complete profile extraction.", "#FFCC00");
+          }
+        } catch (aiErr) {
+          console.error("AI parsing failed:", aiErr);
+          status("AI parse skipped (Ollama offline or API issue). Basic profile saved.", "#FF8030");
+        }
+
         fileInput.value = "";
       } catch (err) {
         status("Parse error: " + err.message, "#FF4444");
@@ -909,9 +1014,10 @@ async function init() {
 
   const welcomeStartBtn = document.getElementById("welcome-start-btn");
   if (welcomeStartBtn) {
-    welcomeStartBtn.onclick = () => {
+    welcomeStartBtn.onclick = async () => {
       const welcomeScreen = document.getElementById("welcome-screen");
       if (welcomeScreen) welcomeScreen.classList.add("hidden");
+      await chrome.storage.local.set({ fcv_welcome_dismissed: true });
     };
   }
 

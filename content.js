@@ -294,6 +294,10 @@
       // Report back count
       chrome.runtime.sendMessage({ type: "AUTOFILL_DONE", ...result });
     }
+    if (message.type === "RE_DETECT") {
+      bannerShown = false;
+      initDetection();
+    }
   });
 
 
@@ -302,7 +306,10 @@
   function tryDetectAndShowBanner() {
     if (bannerShown) return;
 
-    if (hasJobContext() && hasJobForm()) {
+    // Sleek check: matches if URL/text signals look like job context AND there is a form,
+    // OR if we strongly detect a form with standard inputs and a file input (resume upload).
+    const hasStrongForm = hasJobForm() && (document.querySelector("input[type=file]") !== null || document.querySelector("textarea") !== null);
+    if ((hasJobContext() && hasJobForm()) || hasStrongForm) {
       bannerShown = true;
       if (detectionObserver) {
         detectionObserver.disconnect();
@@ -314,7 +321,10 @@
   }
 
   function initDetection() {
-    if (!hasJobContext()) return;
+    if (detectionObserver) {
+      detectionObserver.disconnect();
+      detectionObserver = null;
+    }
 
     // Check immediately
     tryDetectAndShowBanner();
@@ -335,13 +345,13 @@
       subtree: true
     });
 
-    // Cleanup observer after 20 seconds to release resources
+    // Cleanup observer after 30 seconds to release resources
     setTimeout(() => {
       if (detectionObserver) {
         detectionObserver.disconnect();
         detectionObserver = null;
       }
-    }, 20000);
+    }, 30000);
   }
 
   initDetection();

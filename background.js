@@ -49,3 +49,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   jobPageTabs.delete(tabId);
 });
+
+// Watch tab updates (for SPA pages) to re-trigger form detection
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete") {
+    chrome.tabs.sendMessage(tabId, { type: "RE_DETECT" }).catch(() => {});
+  }
+});
