@@ -77,9 +77,17 @@
 
       <div class="stat-grid">
         <div class="stat-card stats-specimen">
-          <div class="stat-specimen-large" id="hero-percent">0%</div>
-          <div class="stat-specimen-label">of resume profile fields completed.</div>
-          <div class="stat-specimen-sub" id="hero-field-count-text">0 / 28 fields filled</div>
+          <div class="stat-specimen-large" id="hero-percent">0</div>
+          <div class="stat-specimen-label">core resume fields completed</div>
+          <div class="stat-specimen-sub" id="hero-field-count-text">0 / 0 core fields filled</div>
+          <div class="config-line">
+            <span class="config-key">SECTIONS DETECTED</span>
+            <span class="config-val" id="stat-sections">0 / 5</span>
+          </div>
+          <div class="config-line">
+            <span class="config-key">OPTIONAL MISSING</span>
+            <span class="config-val" id="stat-optional-missing">0</span>
+          </div>
         </div>
 
         <div class="stat-card config-specimen" id="config-specimen-card">
@@ -173,6 +181,7 @@
   <script src="pdf.worker.min.js"></script>
   <script src="mammoth.browser.min.js"></script>
   <script src="field_registry.js"></script>
+  <script src="resume_parser.js"></script>
   <script src="popup.js"></script>
 </body>
 

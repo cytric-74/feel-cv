@@ -9,7 +9,7 @@ window.FCV_FIELD_REGISTRY = {
   // ── Identity ──────────────────────────────────────────────────────────────
   full_name: {
     label: "Full Name",
-    patterns: ["full name", "your name", "applicant name", "candidate name", "name"]
+    patterns: ["full name", "your name", "applicant name", "candidate name"]
   },
   first_name: {
     label: "First Name",
@@ -41,7 +41,7 @@ window.FCV_FIELD_REGISTRY = {
   },
   github: {
     label: "GitHub URL",
-    patterns: ["github url", "github profile", "github", "portfolio", "personal site", "personal url", "website"]
+    patterns: ["github url", "github profile", "github"]
   },
   portfolio: {
     label: "Portfolio URL",
@@ -74,6 +74,10 @@ window.FCV_FIELD_REGISTRY = {
   work_history: {
     label: "Work History",
     patterns: ["employment history", "work history", "past experience", "previous companies"]
+  },
+  projects: {
+    label: "Projects",
+    patterns: ["notable projects", "key projects", "personal projects", "project experience", "projects"]
   },
 
   // ── Education ─────────────────────────────────────────────────────────────
@@ -119,7 +123,15 @@ window.FCV_FIELD_REGISTRY = {
   },
   achievements: {
     label: "Achievements",
-    patterns: ["notable projects", "key projects", "accomplishments", "proud of", "achievements"]
+    patterns: ["accomplishments", "proud of", "achievements"]
+  },
+  certifications: {
+    label: "Certifications",
+    patterns: ["certifications", "certificates", "licenses", "credentials"]
+  },
+  awards: {
+    label: "Awards",
+    patterns: ["awards", "honors", "honours", "recognitions"]
   },
   salary: {
     label: "Expected Salary",

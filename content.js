@@ -1,32 +1,27 @@
-// content.js — Injected into every page
-// Responsibilities:
-//   1. Score-based detection: only show banner on real job application pages
-//   2. On autofill command: find form fields, match to profile, fill them
-//   3. Watch fields the user manually fills → learn new profile data
-//   4. Show an unobtrusive autofill prompt when a job form is confidently detected
+// content.js — injected into every page: detects job application forms,
+// autofills them from the stored profile, and learns fields the user edits.
 
 (() => {
   "use strict";
 
-  // ── Field registry ────────────────────────────────────────────────────────
-  // Loaded from field_registry.js (injected before this script by manifest).
-  // Fall back to a minimal inline copy if the load order ever breaks.
+  // Falls back to an inline copy if field_registry.js fails to load first.
   const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
-    full_name:        { patterns: ["full name", "your name", "applicant name", "name"] },
+    full_name:        { patterns: ["full name", "your name", "applicant name"] },
     first_name:       { patterns: ["first name", "given name", "forename"] },
     last_name:        { patterns: ["last name", "surname", "family name"] },
     email:            { patterns: ["email address", "email", "e-mail", "mail"] },
     phone:            { patterns: ["phone number", "mobile number", "contact number", "telephone", "mobile", "phone"] },
     location:         { patterns: ["current location", "where are you based", "city", "location", "address"] },
     linkedin:         { patterns: ["linkedin profile", "linkedin url", "linkedin"] },
-    github:           { patterns: ["github url", "github", "portfolio", "website", "personal site"] },
-    portfolio:        { patterns: ["portfolio url", "portfolio", "website", "personal url"] },
+    github:           { patterns: ["github url", "github profile", "github"] },
+    portfolio:        { patterns: ["portfolio url", "portfolio", "website", "personal url", "personal site"] },
     summary:          { patterns: ["professional summary", "profile summary", "about yourself", "tell us about yourself", "describe yourself", "summary", "bio"] },
     headline:         { patterns: ["current position", "current role", "job title", "designation", "headline"] },
     years_experience: { patterns: ["years of experience", "total experience", "how many years"] },
     current_company:  { patterns: ["current organization", "current employer", "current company", "employer"] },
     current_role:     { patterns: ["current designation", "current position", "current title", "current role"] },
     work_history:     { patterns: ["employment history", "work history", "past experience"] },
+    projects:         { patterns: ["notable projects", "key projects", "personal projects", "project experience", "projects"] },
     degree:           { patterns: ["highest qualification", "academic qualification", "qualification", "education", "degree"] },
     university:       { patterns: ["university", "college", "institution", "school", "alma mater"] },
     graduation_year:  { patterns: ["graduation year", "year of graduation", "passed out", "batch"] },
@@ -36,7 +31,9 @@
     cover_letter:     { patterns: ["motivation letter", "statement of purpose", "cover letter", "why should we hire"] },
     motivation:       { patterns: ["reason for applying", "what interests you", "why are you interested", "why this company", "why this role", "why do you want"] },
     strengths:        { patterns: ["greatest strengths", "what are your strengths", "key strengths", "strengths"] },
-    achievements:     { patterns: ["notable projects", "key projects", "accomplishments", "proud of", "achievements"] },
+    achievements:     { patterns: ["accomplishments", "proud of", "achievements"] },
+    certifications:   { patterns: ["certifications", "certificates", "licenses", "credentials"] },
+    awards:           { patterns: ["awards", "honors", "honours", "recognitions"] },
     salary:           { patterns: ["salary expectation", "expected salary", "expected ctc", "compensation", "ctc"] },
     notice_period:    { patterns: ["when can you join", "notice period", "availability", "how soon"] },
   };
@@ -45,7 +42,6 @@
   // Never autofill these (user must generate them per-job)
   const SKIP_AUTOFILL  = new Set(["cover_letter", "motivation", "notice_period", "salary"]);
 
-  // ── Shared label matcher (used by discoverFields + score detector) ────────
   function matchFieldKey(labelText) {
     const norm = labelText.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim();
     let best = null, bestScore = 0;
@@ -60,14 +56,10 @@
     return best;
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // SCORE-BASED JOB APPLICATION PAGE DETECTOR
-  // Only shows the banner when there is confident evidence of:
-  //   a) a job/career page context, AND
-  //   b) actual fillable application fields (not login / search / newsletter)
-  // ════════════════════════════════════════════════════════════════════════════
+  // ── Job application page detector ──────────────────────────────────────────
+  // Only shows the banner with confident evidence of both a job/career page
+  // AND real fillable application fields (not a login/search/newsletter form).
 
-  // ATS domains and career-path URL fragments (generic, not site-specific content)
   const ATS_URL_SIGNALS = [
     "greenhouse.io", "lever.co", "ashby.io", "ashbyhq.com",
     "workday.com", "bamboohr.com", "smartrecruiters.com", "jobvite.com",
@@ -85,13 +77,12 @@
     "upload your resume", "work authorization", "cover letter",
     "equal opportunity", "candidate information"
   ];
-  // URL paths that indicate browsing / searching — NOT application forms
+  // Paths that indicate browsing/searching/auth rather than an application form
   const EXCLUDE_PATH_SIGNALS = [
     "/search", "/browse", "/explore", "/jobs/list", "/jobs/search",
     "/job-listings", "/login", "/signin", "/sign-in", "/signup", "/register"
   ];
 
-  // Personal / application field labels to look for in the DOM
   const PERSONAL_FIELD_PATTERNS = [
     "first name", "last name", "full name", "email", "phone", "mobile",
     "linkedin", "address", "city", "location"
@@ -103,10 +94,6 @@
     "how did you hear", "linkedin", "github", "portfolio"
   ];
 
-  /**
-   * Returns true if the element is visible and interactable.
-   * Checks display, visibility, opacity, dimensions, and disabled state.
-   */
   function isVisible(el) {
     if (!el || el.disabled) return false;
     const style = window.getComputedStyle(el);
@@ -115,22 +102,17 @@
     return rect.width > 0 && rect.height > 0;
   }
 
-  /**
-   * Collect the best label text for a form element from multiple sources.
-   * Returns the longest / most informative string found.
-   */
+  // Tries every common way a form field gets labeled and picks the longest
+  // (most informative) match, since no single source is reliable across sites.
   function getLabelText(el) {
     const candidates = [];
 
-    // 1. <label for="id">
     if (el.id) {
       const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
       if (lbl) candidates.push(lbl.innerText || lbl.textContent);
     }
-    // 2. aria-label
     const ariaLabel = el.getAttribute("aria-label");
     if (ariaLabel) candidates.push(ariaLabel);
-    // 3. aria-labelledby
     const labelledBy = el.getAttribute("aria-labelledby");
     if (labelledBy) {
       const refText = labelledBy.split(/\s+/).map(id => {
@@ -139,24 +121,19 @@
       }).filter(Boolean).join(" ");
       if (refText) candidates.push(refText);
     }
-    // 4. placeholder
     if (el.placeholder) candidates.push(el.placeholder);
-    // 5. name / id attribute (humanized)
     if (el.name) candidates.push(el.name.replace(/[_\-]/g, " "));
     if (el.id)   candidates.push(el.id.replace(/[_\-]/g, " "));
-    // 6. Nearest enclosing <label>
     const parentLabel = el.closest("label");
     if (parentLabel) candidates.push(parentLabel.innerText || parentLabel.textContent);
-    // 7. Previous sibling text (common pattern: <div>Label</div><input>)
+    // Common builder pattern: <div>Label</div><input> with no <label> element at all
     const prev = el.previousElementSibling;
     if (prev && !["INPUT","SELECT","TEXTAREA","BUTTON"].includes(prev.tagName)) {
       const t = (prev.innerText || prev.textContent || "").trim();
       if (t) candidates.push(t);
     }
-    // 8. Parent / container element with a field-wrapper class
     const wrapper = el.closest('[class*="field"],[class*="form-group"],[class*="input-wrap"],[class*="form-item"],[class*="question"]');
     if (wrapper) {
-      // Find the first text-only child (likely the label)
       for (const child of wrapper.children) {
         if (!["INPUT","SELECT","TEXTAREA","BUTTON"].includes(child.tagName)) {
           const t = (child.innerText || child.textContent || "").trim();
@@ -165,26 +142,21 @@
       }
     }
 
-    // Return the longest candidate (most informative)
     return candidates
       .map(c => (c || "").trim())
       .filter(Boolean)
       .sort((a, b) => b.length - a.length)[0] || "";
   }
 
-  /**
-   * Compute page context score and form quality score.
-   * Returns { pageScore, formScore, hasResumeUpload }.
-   */
   function scoreJobPage() {
     const url   = location.href.toLowerCase();
     const title = document.title.toLowerCase();
     let pageScore = 0;
     let formScore = 0;
 
-    // ── Exclusions: bail early on obviously non-application pages ──────────
     if (EXCLUDE_PATH_SIGNALS.some(p => url.includes(p))) return { pageScore: 0, formScore: 0, hasResumeUpload: false };
-    // Login form with no resume upload → exclude
+
+    // A login form without a resume upload is not an application form.
     const hasPassword = document.querySelector("input[type=password]");
     const hasResumeUploadEl = [...document.querySelectorAll("input[type=file]")].find(el => {
       if (!isVisible(el)) return false;
@@ -193,30 +165,23 @@
     });
     if (hasPassword && !hasResumeUploadEl) return { pageScore: 0, formScore: 0, hasResumeUpload: false };
 
-    // ── Page context score ──────────────────────────────────────────────────
-    // Known ATS domain
     if (ATS_URL_SIGNALS.some(d => url.includes(d))) pageScore += 3;
-    // Career-related URL path
     if (CAREER_PATH_SIGNALS.some(p => url.includes(p))) pageScore += 2;
-    // Title contains application-specific phrase
     if (/apply|application|candidate|job\s*form/.test(title)) pageScore += 1;
 
-    // Body text signals (only scan first 4000 chars for speed)
+    // Only scan the first 4000 chars of body text — enough signal, keeps this cheap.
     const bodySnippet = (document.body?.innerText || "").toLowerCase().slice(0, 4000);
     const phraseMatches = APPLICATION_PHRASES.filter(p => bodySnippet.includes(p)).length;
     if (phraseMatches >= 2) pageScore += 1;
     if (phraseMatches >= 4) pageScore += 1;
 
-    // ── Form quality score ──────────────────────────────────────────────────
     const hasResumeUpload = !!hasResumeUploadEl;
     if (hasResumeUpload) formScore += 3;
 
-    // Collect visible, enabled, non-excluded inputs
     const inputEls = [...document.querySelectorAll(
       "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=password]):not([type=file]), textarea, select"
     )].filter(isVisible);
 
-    // Count personal fields
     let personalMatches = 0;
     let applicationMatches = 0;
     const seen = new WeakSet();
@@ -227,52 +192,32 @@
       const lbl = getLabelText(el).toLowerCase();
       if (!lbl) continue;
 
-      // Skip search-only inputs
       if (el.type === "search" || /^search$/.test(el.getAttribute("role") || "")) continue;
-      // Skip single-line inputs that are clearly search boxes by name/id
       if (/\bsearch\b/.test(el.name || "") || /\bsearch\b/.test(el.id || "")) continue;
 
-      const isPersonal     = PERSONAL_FIELD_PATTERNS.some(p => lbl.includes(p));
-      const isApplicationF = APPLICATION_FIELD_PATTERNS.some(p => lbl.includes(p));
-
-      if (isPersonal)     personalMatches++;
-      if (isApplicationF) applicationMatches++;
+      if (PERSONAL_FIELD_PATTERNS.some(p => lbl.includes(p))) personalMatches++;
+      if (APPLICATION_FIELD_PATTERNS.some(p => lbl.includes(p))) applicationMatches++;
     }
 
-    // Score personal fields (up to +4)
     formScore += Math.min(personalMatches, 4);
-    // Score application-specific fields (up to +4)
     formScore += Math.min(applicationMatches * 2, 4);
-    // Bonus if 3+ matched application fields
     if (personalMatches + applicationMatches >= 3) formScore += 1;
 
     return { pageScore, formScore, hasResumeUpload };
   }
 
-  /**
-   * Returns true if the FeelCV banner should be shown on this page.
-   * Requires confident evidence of both a job context AND a real application form.
-   */
   function shouldShowBanner() {
     const { pageScore, formScore, hasResumeUpload } = scoreJobPage();
 
-    // Strong ATS page with at least a couple of application fields
     if (pageScore >= 3 && formScore >= 2) return true;
-    // Has page context AND decent form signals
     if (pageScore >= 2 && formScore >= 3) return true;
-    // Has resume upload and some application fields (even without strong URL signals)
     if (hasResumeUpload && formScore >= 3) return true;
 
     return false;
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // FIELD DISCOVERY (for autofill)
-  // ════════════════════════════════════════════════════════════════════════════
+  // ── Field discovery + autofill ───────────────────────────────────────────────
 
-  /**
-   * Returns an array of { element, key, labelText } for all matchable fields.
-   */
   function discoverFields() {
     const results = [];
     const seen = new WeakSet();
@@ -298,17 +243,19 @@
     return results;
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // FILL A SINGLE ELEMENT
-  // ════════════════════════════════════════════════════════════════════════════
-
   function fillElement(el, value) {
     if (!value) return false;
     const tag = el.tagName.toLowerCase();
     if (tag === "select") {
-      const opts = [...el.options];
-      const norm = value.toLowerCase();
-      const match = opts.find(o => o.text.toLowerCase().includes(norm) || norm.includes(o.text.toLowerCase()));
+      const norm = value.toLowerCase().trim();
+      if (!norm) return false;
+      // Empty-text options (e.g. a blank "-- Select --" placeholder) would
+      // otherwise trivially satisfy norm.includes(""), matching first.
+      const opts = [...el.options].filter(o => o.text && o.text.trim());
+      const exact = opts.find(o => o.text.toLowerCase().trim() === norm);
+      const match = exact || opts
+        .filter(o => o.text.toLowerCase().includes(norm) || norm.includes(o.text.toLowerCase()))
+        .sort((a, b) => b.text.length - a.text.length)[0];
       if (match) {
         el.value = match.value;
         el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -316,7 +263,7 @@
       }
       return false;
     }
-    // input / textarea — use native value setter to trigger React/Vue listeners
+    // Native setter needed so React/Vue's tracked value updates and their listeners fire.
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       tag === "textarea" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
       "value"
@@ -331,10 +278,6 @@
     el.dispatchEvent(new Event("blur",   { bubbles: true }));
     return true;
   }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // AUTOFILL
-  // ════════════════════════════════════════════════════════════════════════════
 
   function doAutofill(profile) {
     const fields = discoverFields();
@@ -354,9 +297,7 @@
     return { filled, skipped, total: fields.length };
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // LEARNING FROM USER INPUT
-  // ════════════════════════════════════════════════════════════════════════════
+  // ── Learning from fields the user fills in manually ──────────────────────────
 
   const watchedFields = new Map(); // element → key
 
@@ -377,6 +318,7 @@
     const stored = await getProfile();
     const newVal = el.value.trim();
     if (stored[key] === newVal) return;
+    // Bare digits are usually noise from rating widgets/counters, not real field data.
     if (/^\d+$/.test(newVal) && !["phone", "graduation_year", "years_experience"].includes(key)) return;
     if (newVal.length < 2) return;
 
@@ -392,9 +334,7 @@
     return new Promise(res => chrome.storage.local.get("fcv_profile", d => res(d.fcv_profile || {})));
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // AUTOFILL PROMPT BANNER
-  // ════════════════════════════════════════════════════════════════════════════
+  // ── Autofill prompt banner ────────────────────────────────────────────────────
 
   let bannerShown = false;
 
@@ -444,10 +384,6 @@
     };
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // MESSAGE LISTENER
-  // ════════════════════════════════════════════════════════════════════════════
-
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "DO_AUTOFILL") {
       const result = doAutofill(message.profile);
@@ -462,20 +398,15 @@
     }
   });
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // DETECTION INIT (with debounce, cache, and hard timeout)
-  // ════════════════════════════════════════════════════════════════════════════
-
   let detectionObserver = null;
   let detectionCache    = null; // { result: bool, ts: number }
-  const CACHE_TTL_MS   = 5000;  // cache scan result for 5 seconds
+  const CACHE_TTL_MS   = 5000;
   const DEBOUNCE_MS    = 600;
   const OBSERVER_TIMEOUT_MS = 20000;
 
   function tryDetectAndShowBanner() {
     if (bannerShown) return;
 
-    // Return cached result if fresh
     if (detectionCache && (Date.now() - detectionCache.ts) < CACHE_TTL_MS) {
       if (detectionCache.result) showAutofillBanner();
       return;
@@ -501,11 +432,10 @@
       detectionObserver = null;
     }
 
-    // Immediate check
     tryDetectAndShowBanner();
     if (bannerShown) return;
 
-    // Watch for dynamically loaded forms (SPAs)
+    // SPAs render the form after initial load, so keep watching until it appears.
     let debounceTimer = null;
     detectionObserver = new MutationObserver(() => {
       if (bannerShown) {
