@@ -1,35 +1,41 @@
-// resume_parser.js — section-aware resume extraction. Loaded before popup.js
-// in popup.html; both are classic scripts sharing one global scope.
-// Builds a structured resume object, then derives the flat profile that
-// field_registry.js/content.js autofill against.
+// Section-aware resume extraction. Builds a structured resume object, then
+// derives the flat profile that field_registry.js/content.js autofill against.
 
 "use strict";
 
-const SECTION_HEADINGS = [
-  "experience", "work experience", "professional experience", "employment", "employment history",
-  "internship", "internships",
-  "education", "academic background", "academic qualifications",
-  "skills", "technical skills", "core competencies", "competencies", "technologies",
-  "projects", "project experience", "personal projects", "academic projects",
-  "certifications", "certification", "licenses",
-  "awards", "achievements", "honours", "honors",
-  "summary", "profile", "objective", "professional summary", "career objective",
-  "publications", "research",
-  "languages", "programming languages",
-  "volunteer", "volunteering", "extra-curricular", "activities", "interests"
+// Keyword stems, not exact phrases, so "Teaching Experience" or "Clinical
+// Experience" both match on "experience" without listing every variant.
+const CORE_HEADING_STEMS = [
+  "experience", "employment", "internship",
+  "education", "academic",
+  "skill", "competenc", "technolog",
+  "project",
+  "certification", "certificate", "licen", "credential", "admission",
+  "award", "achievement", "honor", "honour",
+  "summary", "profile", "objective",
+  "publication", "research",
+  "language",
+  "volunteer", "extra-curricular", "activit", "interest", "reference", "course",
 ];
+const CORE_HEADING_RE = new RegExp(`\\b(?:${CORE_HEADING_STEMS.join("|")})`, "i");
+const MINOR_WORDS = new Set(["and", "of", "in", "the", "for", "a", "an", "to", "&", "/"]);
 
-const HEADING_TOKEN = SECTION_HEADINGS
-  .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-  .sort((a, b) => b.length - a.length) // longest first so "work experience" wins over "experience"
-  .join("|");
+// A heading line is short, Title Case or ALL CAPS, has no sentence
+// punctuation, and contains a core stem — this is how "Certifications &
+// Awards" or "Teaching Experience" get recognized without a fixed phrase list.
+function isHeadingLine(line) {
+  const trimmed = line.replace(/:$/, "").trim();
+  if (!trimmed || trimmed.length > 35 || /[.!?]$/.test(trimmed)) return false;
 
-// A heading line may combine multiple known headings with a connector,
-// e.g. "Certifications & Awards" or "Awards and Honors".
-const HEADING_LINE_RE = new RegExp(
-  `^(?:${HEADING_TOKEN})(?:\\s*(?:&|and|\\/|,)\\s*(?:${HEADING_TOKEN}))*[:\\s]*$`,
-  "i"
-);
+  const words = trimmed.replace(/[&/]/g, " ").split(/\s+/).filter(Boolean);
+  // Real headings are 1-3 words. A longer phrase is more likely to be actual
+  // content, e.g. a certification named "HubSpot Content Marketing Certification".
+  if (!words.length || words.length > 3) return false;
+  const properShape = words.every(w => MINOR_WORDS.has(w.toLowerCase()) || /^[A-Z]/.test(w));
+  if (!properShape) return false;
+
+  return CORE_HEADING_RE.test(trimmed);
+}
 
 function normalizeResumeText(text) {
   // Collapse 3+ consecutive spaces → single space
@@ -38,14 +44,12 @@ function normalizeResumeText(text) {
   // Fix soft/wrapped hyphenation: "im- prove" → "improve"
   text = text.replace(/-\s+([a-z])/g, "$1");
 
-  // Insert newline before common section headings that may appear mid-line
-  // because PDF text extraction collapsed a heading into the previous line.
-  // The negative lookahead excludes cases like "AWS Certification, Inc." where
-  // the heading word is just ordinary prose immediately followed by a comma —
-  // a real section heading is never followed directly by one.
+  // Splits a heading that got glued onto the previous line during PDF
+  // extraction. Requires 2+ spaces so it doesn't fire on ordinary text that
+  // just happens to contain one of these words, like "Master of Education".
   const MIDLINE_HEADING_RE = new RegExp(
-    `(?<=[\\w,;.])\\s+((?:Work\\s+)?Experience|Projects?|(?:Technical\\s+)?Skills|Education|Certifications?|Awards?|Achievements?|Summary|Profile|Objective|Publications?|Volunteer(?:ing)?|Interests?|References?|Languages?|Courses?|Honou?rs?|Activities)(?!\\s*,)`,
-    "gi"
+    `(?<=[\\w,;.])\\s{2,}((?:Work\\s+)?Experience|Projects?|(?:Technical\\s+)?Skills|Education|Certifications?|Awards?|Achievements?|Summary|Profile|Objective|Publications?|Volunteer(?:ing)?|Interests?|References?|Languages?|Courses?|Honou?rs?|Activities)(?!\\s*,)(?!\\s*$)`,
+    "gm"
   );
   text = text.replace(MIDLINE_HEADING_RE, "\n$1");
 
@@ -59,7 +63,7 @@ function splitResumeSections(text) {
   let current = { heading: "header", lines: [] };
 
   for (const line of rawLines) {
-    if (HEADING_LINE_RE.test(line)) {
+    if (isHeadingLine(line)) {
       if (current.lines.length > 0 || current.heading !== "header") {
         sections.push(current);
       }
@@ -101,18 +105,25 @@ function extractContactInfo(text) {
   return info;
 }
 
-function extractName(lines) {
-  const NAME_RE = /^([A-Z][a-zA-Z'-]+)(\s[A-Z][a-zA-Z'-]+){1,4}$/;
-  const ALLCAPS_RE = /^([A-Z]{2,})(\s[A-Z]{2,}){1,4}$/;
+const NAME_RE = /^([A-Z][a-zA-Z'-]+)(\s[A-Z][a-zA-Z'-]+){1,4}$/;
+const ALLCAPS_RE = /^([A-Z]{2,})(\s[A-Z]{2,}){1,4}$/;
+// Credentials like ", RN" or ", Esq." would otherwise break the name regexes.
+const CREDENTIAL_SUFFIX_RE = /,\s*(?:RN|LPN|NP|PA|MD|DO|DDS|DVM|PhD|EdD|JD|Esq\.?|CPA|MBA|PE|PMP|CFA|CFP|LCSW|MSW|RD)\.?$/i;
 
+function extractName(lines) {
   for (const line of lines.slice(0, 8)) {
     if (line.includes("@") || line.includes("http") || /^\d/.test(line)) continue;
-    if (line.length < 3 || line.length > 60) continue;
-    if (/[|•·,;@]/.test(line) && line.split(/[|•·,;@]/).length > 2) continue;
-    const words = line.trim().split(/\s+/);
+    // A heading ("Clinical Experience") or job title ("Associate Attorney")
+    // can look exactly like a plausible name — skip both.
+    if (isHeadingLine(line) || ROLE_KEYWORDS_RE.test(line)) continue;
+
+    const candidate = line.replace(CREDENTIAL_SUFFIX_RE, "").trim();
+    if (candidate.length < 3 || candidate.length > 60) continue;
+    if (/[|•·,;@]/.test(candidate) && candidate.split(/[|•·,;@]/).length > 2) continue;
+    const words = candidate.split(/\s+/);
     if (words.length === 1 && words[0] === words[0].toUpperCase()) continue;
 
-    if (NAME_RE.test(line) || ALLCAPS_RE.test(line)) return line.trim();
+    if (NAME_RE.test(candidate) || ALLCAPS_RE.test(candidate)) return candidate;
   }
   return null;
 }
@@ -125,8 +136,19 @@ function extractSummary(sections) {
   return null;
 }
 
-const DATE_RANGE_RE = /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s)?\d{4}\s*[–—\-]\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?(?:\d{4}|present|current|now|ongoing)/i;
-const ROLE_KEYWORDS_RE = /\b(?:engineer|developer|analyst|manager|designer|scientist|architect|lead|consultant|specialist|coordinator|officer|director|associate|intern|researcher|executive|head|vp|cto|ceo|founder|staff|senior|junior|principal|full.?stack|front.?end|back.?end|devops|data|ml|ai|software|product|project|program|qa|sre|cloud|mobile|embedded|platform)\b/i;
+// A date token is a month name + year, a numeric MM/YYYY, or a bare year.
+const MONTH_NAME_TOKEN = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{4}";
+const MONTH_NUM_TOKEN = "(?:0?[1-9]|1[0-2])[/-]\\d{4}";
+const DATE_TOKEN = `(?:${MONTH_NAME_TOKEN}|${MONTH_NUM_TOKEN}|\\d{4})`;
+const DATE_RANGE_RE = new RegExp(`${DATE_TOKEN}\\s*[–—-]\\s*(?:${DATE_TOKEN}|present|current|now|ongoing)`, "i");
+
+// Job titles across tech, healthcare, education, legal, trades, and more —
+// used to tell which side of a company/role split is the role.
+const ROLE_KEYWORDS_RE = /\b(?:engineer|developer|analyst|manager|designer|scientist|architect|lead|consultant|specialist|coordinator|officer|director|associate|intern|researcher|executive|head|vp|cto|ceo|founder|staff|senior|junior|principal|full.?stack|front.?end|back.?end|devops|data|ml|ai|software|product|project|program|qa|sre|cloud|mobile|embedded|platform|nurse|teacher|professor|instructor|tutor|attorney|lawyer|paralegal|physician|doctor|dentist|therapist|pharmacist|technician|clerk|cashier|barista|server|chef|cook|driver|mechanic|electrician|plumber|receptionist|secretary|accountant|auditor|banker|teller|counselor|paramedic|firefighter|agent|representative|advisor|administrator|supervisor|superintendent|hygienist|veterinarian|midwife|caregiver|aide|custodian|librarian|curator|editor|writer|journalist|photographer|artist|actor|musician|baker|butcher|tailor|stylist|pilot|captain|guard)\b/i;
+
+// Company-name signal, used as a tiebreaker when neither side of a split looks like a job title.
+const ORG_SUFFIX_RE = /\b(?:inc|llc|llp|ltd|corp(?:oration)?|co|company|group|partners|associates|solutions|services|systems|holdings|foundation|agency|consulting|hospital|medical|clinic|university|college|school|institute|center|centre|bank|studio|labs?|technologies|enterprises|regional|memorial)\b\.?/i;
+
 const BULLET_LINE_RE = /^[•\-*▪◦‣›»]\s*/;
 
 const MONTH_MAP = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
@@ -138,6 +160,8 @@ function toDate(str) {
   if (m && MONTH_MAP[m[1].toLowerCase()] !== undefined) {
     return new Date(parseInt(m[2], 10), MONTH_MAP[m[1].toLowerCase()], 1);
   }
+  const num = str.match(/\b(0?[1-9]|1[0-2])[/-](\d{4})\b/);
+  if (num) return new Date(parseInt(num[2], 10), parseInt(num[1], 10) - 1, 1);
   const y = str.match(/\b(19|20)\d{2}\b/);
   if (y) return new Date(parseInt(y[0], 10), 0, 1);
   return null;
@@ -163,32 +187,54 @@ function formatDuration(start_date, end_date) {
   return parts.join(" ") || "< 1 mo";
 }
 
-// Splits a same-line "Company · Domain · Role" remainder (date already
-// stripped out) into { company, domain, role }.
+// Hides commas inside parentheses, e.g. "(Austin, TX)", from a comma-based split.
+const COMMA_PLACEHOLDER = "";
+function maskParenCommas(str) {
+  let depth = 0, masked = "";
+  for (const ch of str) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    masked += (ch === "," && depth > 0) ? COMMA_PLACEHOLDER : ch;
+  }
+  return masked;
+}
+
+// Splits a same-line "Company · Domain · Role" or "Role, Company (Location)" remainder into its parts.
 function splitExperienceRemainder(remainder) {
-  const parts = remainder.split(/\s*[·•|]\s*|\s+[–—]\s+/).map(p => p.trim()).filter(Boolean);
+  const parts = maskParenCommas(remainder)
+    .split(/\s*[·•|,]\s*|\s+[–—]\s+/)
+    .map(p => p.trim().split(COMMA_PLACEHOLDER).join(","))
+    .filter(Boolean);
   let company = "", role = "", domain = "";
 
   if (parts.length === 1) {
-    if (ROLE_KEYWORDS_RE.test(parts[0])) role = parts[0]; else company = parts[0];
+    // Org suffix checked first — "Skyline Software Inc." shouldn't match "software" as a role.
+    if (ORG_SUFFIX_RE.test(parts[0])) company = parts[0];
+    else if (ROLE_KEYWORDS_RE.test(parts[0])) role = parts[0];
+    else company = parts[0];
   } else if (parts.length === 2) {
     const [a, b] = parts;
-    if (ROLE_KEYWORDS_RE.test(b) && !ROLE_KEYWORDS_RE.test(a)) { company = a; role = b; }
-    else if (ROLE_KEYWORDS_RE.test(a) && !ROLE_KEYWORDS_RE.test(b)) { role = a; company = b; }
+    const aRole = ROLE_KEYWORDS_RE.test(a), bRole = ROLE_KEYWORDS_RE.test(b);
+    if (bRole && !aRole) { company = a; role = b; }
+    else if (aRole && !bRole) { role = a; company = b; }
+    else if (ORG_SUFFIX_RE.test(a) && !ORG_SUFFIX_RE.test(b)) { company = a; role = b; }
+    else if (ORG_SUFFIX_RE.test(b) && !ORG_SUFFIX_RE.test(a)) { company = b; role = a; }
     else { company = a; role = b; }
   } else {
     company = parts[0];
     role = parts[parts.length - 1];
     domain = parts.slice(1, -1).join(" · ");
-    if (!ROLE_KEYWORDS_RE.test(role) && ROLE_KEYWORDS_RE.test(company)) {
+    const roleLooksLikeRole = ROLE_KEYWORDS_RE.test(role), companyLooksLikeRole = ROLE_KEYWORDS_RE.test(company);
+    if (!roleLooksLikeRole && companyLooksLikeRole) {
+      [company, role] = [role, company];
+    } else if (!roleLooksLikeRole && !companyLooksLikeRole && ORG_SUFFIX_RE.test(role) && !ORG_SUFFIX_RE.test(company)) {
       [company, role] = [role, company];
     }
   }
   return { company, role, domain };
 }
 
-// Handles both the "3-line" layout (company / role / date on separate lines)
-// and the "1-line" layout (company · role · date together), plus bullets.
+// Handles both the "3-line" layout (company / role / date on separate lines) and the "1-line" layout together.
 function extractExperienceEntries(sectionLines) {
   const anchors = [];
   sectionLines.forEach((line, idx) => { if (DATE_RANGE_RE.test(line)) anchors.push(idx); });
@@ -221,20 +267,45 @@ function extractExperienceEntries(sectionLines) {
         { i: idx + 1, text: sectionLines[idx + 1] || "" },
       ].filter(c => c.text && !DATE_RANGE_RE.test(c.text) && c.text.length > 1 && c.text.length < 80);
 
+      // Pass 1: a recognized job title anchors the role.
       for (const c of candidates) {
         if (!role && ROLE_KEYWORDS_RE.test(c.text)) { role = c.text.trim(); consumed.add(c.i); }
-        else if (!company && c.text.trim() !== role) { company = c.text.trim(); consumed.add(c.i); }
       }
-      if (!role && !company && sectionLines[idx - 1]) {
-        company = sectionLines[idx - 1].trim();
-        consumed.add(idx - 1);
+      // Pass 2: among what's left, a recognized org-name suffix anchors the company.
+      for (const c of candidates) {
+        if (consumed.has(c.i)) continue;
+        if (!company && ORG_SUFFIX_RE.test(c.text)) { company = c.text.trim(); consumed.add(c.i); }
       }
+      // Pass 3: nothing matched — fall back to positional order.
+      for (const c of candidates) {
+        if (consumed.has(c.i)) continue;
+        if (!company) { company = c.text.trim(); consumed.add(c.i); }
+        else if (!role) { role = c.text.trim(); consumed.add(c.i); }
+      }
+    }
+
+    // Hybrid layout: role on its own line, then "Company · Dates" on the next.
+    const prevIdx = idx - 1;
+    const prevText = sectionLines[prevIdx] || "";
+    if ((!company || !role) && prevText && !consumed.has(prevIdx) &&
+        !DATE_RANGE_RE.test(prevText) && prevText.length > 1 && prevText.length < 80) {
+      if (!role) { role = prevText.trim(); consumed.add(prevIdx); }
+      else if (!company) { company = prevText.trim(); consumed.add(prevIdx); }
     }
 
     const nextAnchorIdx = anchors[a + 1] !== undefined ? anchors[a + 1] : sectionLines.length;
     const bulletStart = Math.max(idx, ...consumed) + 1;
+
+    // The line before the next anchor might be its role/title, not our bullet —
+    // a title has no sentence-ending punctuation, unlike a real bullet.
+    const boundaryIdx = nextAnchorIdx - 1;
+    const boundaryLine = sectionLines[boundaryIdx] || "";
+    const boundaryLooksLikeNextRole = boundaryIdx > idx && boundaryLine &&
+      !BULLET_LINE_RE.test(boundaryLine) && !/[.!?:]$/.test(boundaryLine) && boundaryLine.length < 60;
+    const bulletEnd = boundaryLooksLikeNextRole ? boundaryIdx : nextAnchorIdx;
+
     const bullets = [];
-    for (let j = bulletStart; j < nextAnchorIdx; j++) {
+    for (let j = bulletStart; j < bulletEnd; j++) {
       const raw = sectionLines[j] || "";
       if (!raw) continue;
       if (BULLET_LINE_RE.test(raw)) {
@@ -370,8 +441,7 @@ function splitSkillTokens(str) {
   return parts.map(p => p.trim()).filter(p => p.length > 0 && p.length < 60);
 }
 
-// Prefers "Label: items" lines (e.g. "ML/AI: TensorFlow, PyTorch"); falls
-// back to a flat token list under "other" when no labeled lines exist.
+// Prefers "Label: items" lines; falls back to a flat token list under "other".
 function extractSkillGroups(sectionLines) {
   const groups = { languages: [], frameworks: [], ml_ai: [], data: [], cloud_tools: [], other: [] };
   const LABEL_RE = /^([A-Za-z][A-Za-z /&+]{1,40}):\s*(.+)$/;
@@ -394,8 +464,7 @@ function extractSkillGroups(sectionLines) {
     for (const cat of Object.keys(groups)) groups[cat] = [...new Set(groups[cat])];
   }
 
-  // Always populate languages from known language names even if the
-  // skills section wasn't explicitly labeled per-category.
+  // Fall back to known language names if no "Languages:" label was found.
   if (!groups.languages.length) {
     const allTokens = Object.values(groups).flat().join(" ").toLowerCase();
     const found = LANG_NAMES.filter(l => new RegExp(`\\b${l.replace("+", "\\+")}\\b`, "i").test(allTokens));
@@ -405,7 +474,7 @@ function extractSkillGroups(sectionLines) {
   return groups;
 }
 
-const DEGREE_RE = /\b(?:bachelor|master|doctor|phd|b\.?tech|m\.?tech|b\.?e\.?|m\.?e\.?|b\.?sc|m\.?sc|b\.?com|mba|diploma|associate|a\.?s\.?|b\.?s\.?|m\.?s\.?|b\.?a\.?|m\.?a\.?|llb|llm|md|dds|jd|honours?)\b/i;
+const DEGREE_RE = /\b(?:bachelor|master|doctor|ph\.?d\.?|b\.?tech|m\.?tech|b\.?e\.?|m\.?e\.?|b\.?sc|m\.?sc|b\.?com|mba|diploma|associate|a\.?s\.?|b\.?s\.?|m\.?s\.?|b\.?a\.?|m\.?a\.?|ll\.?b\.?|ll\.?m\.?|m\.?d\.?|d\.?d\.?s\.?|d\.?v\.?m\.?|j\.?d\.?|honours?)\b/i;
 const INST_RE = /\b(?:university|college|institute|school|academy|polytechnic|iit|nit|bits|mit|stanford|oxford|cambridge|iisc|iim)\b/i;
 const MAJOR_RE = /\b(?:computer science|information technology|software engineering|electrical|mechanical|civil|chemical|data science|artificial intelligence|machine learning|mathematics|physics|biology|finance|economics|management|business|commerce|law|medicine|nursing|psychology|sociology)\b/i;
 const GPA_RE = /\bgpa\b[:\s]*([\d.]+\s*(?:\/\s*[\d.]+)?)/i;
@@ -473,8 +542,7 @@ function extractListItems(sectionLines) {
 const CERT_ITEM_RE = /certifi|certificate|license|credential/i;
 const AWARD_ITEM_RE = /\baward|honou?r|runner-?up|winner|medal|scholarship|top\s+\d+(?:st|nd|rd|th)?\s*percentile|\b1st\b|\b2nd\b|\b3rd\b/i;
 
-// Used when "Certifications & Awards" is one combined section, so items get
-// classified instead of duplicated into both arrays.
+// For a combined "Certifications & Awards" section — classifies each item instead of duplicating it into both.
 function classifyCertAwardItems(items) {
   const certifications = [], awards = [];
   for (const item of items) {
@@ -511,9 +579,8 @@ function buildStructuredProfile(text) {
   }
 
   const headerSection = sections.find(s => s.heading === "header");
-  const headerLines = headerSection ? headerSection.lines : [];
-  const locText = headerLines.slice(0, 10).join(" ") + " " + allLines.slice(0, 10).join(" ");
-  const locM = locText.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s*([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)\b/);
+  const locText = (headerSection ? headerSection.lines : allLines).slice(0, 10).join(" ");
+  const locM = locText.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?),\s*([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)\b/);
   if (locM) profile.location = locM[0];
 
   const summary = extractSummary(sections);
@@ -550,14 +617,13 @@ function buildStructuredProfile(text) {
 }
 
 const DEGREE_RANK = {
-  phd: 6, doctor: 6, md: 6,
+  phd: 6, doctor: 6, md: 6, jd: 6, llb: 6, llm: 6, dds: 6, dvm: 6,
   master: 5, mtech: 5, ms: 5, msc: 5, mba: 5, ma: 5,
   bachelor: 4, btech: 4, be: 4, bsc: 4, ba: 4,
   diploma: 2, associate: 1,
 };
 
-// Word-boundary match (not plain substring) so short keys like "ma"/"ba"
-// don't false-positive on unrelated words such as "Mass Communication".
+// Word-boundary match, not substring — so "ma" doesn't match inside "Mass Communication".
 function rankDegree(entry) {
   const d = (entry.degree || "").toLowerCase().replace(/\./g, "");
   let best = 3;
@@ -667,8 +733,7 @@ const STRUCTURED_SCHEMA_DESCRIPTION = `{
   "awards": [""]
 }`;
 
-// Prompt is built from section-marked text (not raw collapsed text) so the
-// model sees the same section boundaries the deterministic parser uses.
+// Built from section-marked text so the model sees the same boundaries the parser uses.
 function buildAIPrompt(normalizedText) {
   const sections = splitResumeSections(normalizedText);
   const sectioned = sections.map(s => `## ${s.heading}\n${s.lines.join("\n")}`).join("\n\n");
@@ -754,8 +819,7 @@ function mergeArraySection(existing, incoming, keyFields) {
   return merged;
 }
 
-// Contact fields/scalars fill gaps only (never overwrite what regex already
-// found); array sections keep deterministic entries and only gain new ones.
+// AI only fills gaps — never overwrites what regex already found.
 function mergeAIIntoStructured(structured, aiRaw) {
   const ai = validateAIStructured(aiRaw);
   const merged = { ...structured };

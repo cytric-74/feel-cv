@@ -1,7 +1,4 @@
-// field_registry.js — Single source of truth for all FeelCV profile fields.
-// Loaded as a plain script in popup.html AND as the first entry in
-// manifest.json content_scripts, so both popup.js and content.js can
-// reference window.FCV_FIELD_REGISTRY without duplication.
+// Single source of truth for all FeelCV profile fields, shared by popup.js and content.js.
 
 "use strict";
 

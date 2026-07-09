@@ -1,5 +1,4 @@
-// background.js — Service Worker
-// Handles tab state and bridges content <-> popup messages
+// Service worker: tracks job-page tabs and bridges content <-> popup messages.
 
 const jobPageTabs = new Set();
 
@@ -36,7 +35,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Content script found new fields after user typed — relay to popup
   if (message.type === "NEW_FIELD_LEARNED") {
-    // Broadcast to popup if open
     chrome.runtime.sendMessage(message).catch(() => {});
     sendResponse({ success: true });
     return;

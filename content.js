@@ -1,41 +1,21 @@
-// content.js — injected into every page: detects job application forms,
-// autofills them from the stored profile, and learns fields the user edits.
+// Injected into every page: detects job forms, autofills them, and learns edited fields.
 
 (() => {
   "use strict";
 
-  // Falls back to an inline copy if field_registry.js fails to load first.
+  // Base selector for fillable fields. Scoring also excludes password fields.
+  const FILLABLE_EXCLUSIONS = ":not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file])";
+  const FILLABLE_SELECTOR = `input${FILLABLE_EXCLUSIONS}, textarea, select`;
+  const SCORING_INPUT_SELECTOR = `input${FILLABLE_EXCLUSIONS}:not([type=password]), textarea, select`;
+
+  // Fallback if field_registry.js fails to load — just enough to not crash.
   const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
-    full_name:        { patterns: ["full name", "your name", "applicant name"] },
-    first_name:       { patterns: ["first name", "given name", "forename"] },
-    last_name:        { patterns: ["last name", "surname", "family name"] },
-    email:            { patterns: ["email address", "email", "e-mail", "mail"] },
-    phone:            { patterns: ["phone number", "mobile number", "contact number", "telephone", "mobile", "phone"] },
-    location:         { patterns: ["current location", "where are you based", "city", "location", "address"] },
-    linkedin:         { patterns: ["linkedin profile", "linkedin url", "linkedin"] },
-    github:           { patterns: ["github url", "github profile", "github"] },
-    portfolio:        { patterns: ["portfolio url", "portfolio", "website", "personal url", "personal site"] },
-    summary:          { patterns: ["professional summary", "profile summary", "about yourself", "tell us about yourself", "describe yourself", "summary", "bio"] },
-    headline:         { patterns: ["current position", "current role", "job title", "designation", "headline"] },
-    years_experience: { patterns: ["years of experience", "total experience", "how many years"] },
-    current_company:  { patterns: ["current organization", "current employer", "current company", "employer"] },
-    current_role:     { patterns: ["current designation", "current position", "current title", "current role"] },
-    work_history:     { patterns: ["employment history", "work history", "past experience"] },
-    projects:         { patterns: ["notable projects", "key projects", "personal projects", "project experience", "projects"] },
-    degree:           { patterns: ["highest qualification", "academic qualification", "qualification", "education", "degree"] },
-    university:       { patterns: ["university", "college", "institution", "school", "alma mater"] },
-    graduation_year:  { patterns: ["graduation year", "year of graduation", "passed out", "batch"] },
-    major:            { patterns: ["field of study", "specialization", "stream", "branch", "course", "major"] },
-    skills:           { patterns: ["technical skills", "tech stack", "technologies", "competencies", "expertise", "tools", "skills"] },
-    languages:        { patterns: ["programming languages", "languages known", "coding languages"] },
-    cover_letter:     { patterns: ["motivation letter", "statement of purpose", "cover letter", "why should we hire"] },
-    motivation:       { patterns: ["reason for applying", "what interests you", "why are you interested", "why this company", "why this role", "why do you want"] },
-    strengths:        { patterns: ["greatest strengths", "what are your strengths", "key strengths", "strengths"] },
-    achievements:     { patterns: ["accomplishments", "proud of", "achievements"] },
-    certifications:   { patterns: ["certifications", "certificates", "licenses", "credentials"] },
-    awards:           { patterns: ["awards", "honors", "honours", "recognitions"] },
-    salary:           { patterns: ["salary expectation", "expected salary", "expected ctc", "compensation", "ctc"] },
-    notice_period:    { patterns: ["when can you join", "notice period", "availability", "how soon"] },
+    full_name: { patterns: ["full name", "your name", "applicant name"] },
+    first_name: { patterns: ["first name", "given name", "forename"] },
+    last_name: { patterns: ["last name", "surname", "family name"] },
+    email: { patterns: ["email address", "email", "e-mail", "mail"] },
+    phone: { patterns: ["phone number", "mobile number", "contact number", "telephone", "mobile", "phone"] },
+    location: { patterns: ["current location", "where are you based", "city", "location", "address"] },
   };
 
   const SKIP_LEARNING  = new Set(["notice_period", "cover_letter", "motivation"]);
@@ -56,9 +36,7 @@
     return best;
   }
 
-  // ── Job application page detector ──────────────────────────────────────────
-  // Only shows the banner with confident evidence of both a job/career page
-  // AND real fillable application fields (not a login/search/newsletter form).
+  // Job application page detector — needs both a job page and real form fields.
 
   const ATS_URL_SIGNALS = [
     "greenhouse.io", "lever.co", "ashby.io", "ashbyhq.com",
@@ -102,8 +80,7 @@
     return rect.width > 0 && rect.height > 0;
   }
 
-  // Tries every common way a form field gets labeled and picks the longest
-  // (most informative) match, since no single source is reliable across sites.
+  // Tries every common way a field gets labeled and returns the longest match.
   function getLabelText(el) {
     const candidates = [];
 
@@ -178,9 +155,7 @@
     const hasResumeUpload = !!hasResumeUploadEl;
     if (hasResumeUpload) formScore += 3;
 
-    const inputEls = [...document.querySelectorAll(
-      "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=password]):not([type=file]), textarea, select"
-    )].filter(isVisible);
+    const inputEls = [...document.querySelectorAll(SCORING_INPUT_SELECTOR)].filter(isVisible);
 
     let personalMatches = 0;
     let applicationMatches = 0;
@@ -222,9 +197,7 @@
     const results = [];
     const seen = new WeakSet();
 
-    const inputs = document.querySelectorAll(
-      "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select"
-    );
+    const inputs = document.querySelectorAll(FILLABLE_SELECTOR);
 
     for (const el of inputs) {
       if (seen.has(el)) continue;
@@ -249,8 +222,7 @@
     if (tag === "select") {
       const norm = value.toLowerCase().trim();
       if (!norm) return false;
-      // Empty-text options (e.g. a blank "-- Select --" placeholder) would
-      // otherwise trivially satisfy norm.includes(""), matching first.
+      // Skip blank placeholder options, which would match any value trivially.
       const opts = [...el.options].filter(o => o.text && o.text.trim());
       const exact = opts.find(o => o.text.toLowerCase().trim() === norm);
       const match = exact || opts

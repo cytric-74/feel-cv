@@ -47,44 +47,19 @@ if (typeof chrome === "undefined" || !chrome.storage) {
   };
 }
 
-// Use the shared registry loaded by field_registry.js; fall back to a minimal
-// inline copy so the popup still works if the script order ever changes.
+// Fallback if field_registry.js fails to load — just enough to not crash.
 const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
-  full_name:        { label: "Full Name",              patterns: ["full name", "your name", "applicant name"] },
-  first_name:       { label: "First Name",             patterns: ["first name", "given name", "forename"] },
-  last_name:        { label: "Last Name",              patterns: ["last name", "surname", "family name"] },
-  email:            { label: "Email",                  patterns: ["email address", "email", "e-mail", "mail"] },
-  phone:            { label: "Phone",                  patterns: ["phone number", "mobile number", "contact number", "telephone", "mobile", "phone"] },
-  location:         { label: "Location / City",        patterns: ["current location", "where are you based", "city", "location", "address"] },
-  linkedin:         { label: "LinkedIn URL",           patterns: ["linkedin profile", "linkedin url", "linkedin"] },
-  github:           { label: "GitHub URL",             patterns: ["github url", "github profile", "github"] },
-  portfolio:        { label: "Portfolio URL",          patterns: ["portfolio url", "portfolio", "website", "personal url", "personal site"] },
-  summary:          { label: "About / Summary",        patterns: ["professional summary", "profile summary", "about yourself", "tell us about yourself", "describe yourself", "summary", "bio"] },
-  headline:         { label: "Professional Headline",  patterns: ["current position", "current role", "job title", "designation", "headline"] },
-  years_experience: { label: "Years of Experience",   patterns: ["years of experience", "total experience", "how many years"] },
-  current_company:  { label: "Current Employer",      patterns: ["current organization", "current employer", "current company", "employer"] },
-  current_role:     { label: "Current Job Title",     patterns: ["current designation", "current position", "current title", "current role"] },
-  work_history:     { label: "Work History",           patterns: ["employment history", "work history", "past experience"] },
-  projects:         { label: "Projects",                patterns: ["notable projects", "key projects", "personal projects", "project experience", "projects"] },
-  degree:           { label: "Degree",                 patterns: ["highest qualification", "academic qualification", "qualification", "education", "degree"] },
-  university:       { label: "University / College",  patterns: ["university", "college", "institution", "school", "alma mater"] },
-  graduation_year:  { label: "Graduation Year",       patterns: ["graduation year", "year of graduation", "passed out", "batch"] },
-  major:            { label: "Field of Study",         patterns: ["field of study", "specialization", "stream", "branch", "course", "major"] },
-  skills:           { label: "Skills",                 patterns: ["technical skills", "tech stack", "technologies", "competencies", "expertise", "tools", "skills"] },
-  languages:        { label: "Programming Languages",  patterns: ["programming languages", "languages known", "coding languages"] },
-  cover_letter:     { label: "Cover Letter",           patterns: ["motivation letter", "statement of purpose", "cover letter", "why should we hire"] },
-  motivation:       { label: "Why this role / company",patterns: ["reason for applying", "what interests you", "why are you interested", "why this company", "why this role", "why do you want"] },
-  strengths:        { label: "Key Strengths",          patterns: ["greatest strengths", "what are your strengths", "key strengths", "strengths"] },
-  achievements:     { label: "Achievements",           patterns: ["accomplishments", "proud of", "achievements"] },
-  certifications:   { label: "Certifications",          patterns: ["certifications", "certificates", "licenses", "credentials"] },
-  awards:           { label: "Awards",                  patterns: ["awards", "honors", "honours", "recognitions"] },
-  salary:           { label: "Expected Salary",        patterns: ["salary expectation", "expected salary", "expected ctc", "compensation", "ctc"] },
-  notice_period:    { label: "Notice Period",          patterns: ["when can you join", "notice period", "availability", "how soon"] },
+  full_name: { label: "Full Name", patterns: ["full name", "your name", "applicant name"] },
+  first_name: { label: "First Name", patterns: ["first name", "given name", "forename"] },
+  last_name: { label: "Last Name", patterns: ["last name", "surname", "family name"] },
+  email: { label: "Email", patterns: ["email address", "email", "e-mail", "mail"] },
+  phone: { label: "Phone", patterns: ["phone number", "mobile number", "contact number", "telephone", "mobile", "phone"] },
+  location: { label: "Location / City", patterns: ["current location", "where are you based", "city", "location", "address"] },
 };
 
 const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", "achievements", "summary"]);
 
-const getProfile = () => new Promise(r => chrome.storage.local.get("fcv_profile", d => r(d.fcv_profile || {})));
+const getProfile = () => storageGet("fcv_profile").then(p => p || {});
 const setProfile = (p) => new Promise(r => chrome.storage.local.set({ fcv_profile: p }, r));
 const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({ ...cur, ...patch }); };
 
@@ -106,9 +81,7 @@ const setProviderConfig = (cfg) => new Promise(r =>
   chrome.storage.local.set({ fcv_provider: cfg }, r)
 );
 
-// normalizeResumeText, splitResumeSections, and all section parsers live in
-// resume_parser.js (loaded before this script) and are called directly since
-// both are plain classic scripts sharing one global scope.
+// Text parsing lives in resume_parser.js, loaded before this script.
 async function extractTextFromFile(file) {
   const ext = file.name.split(".").pop().toLowerCase();
   if (ext === "pdf") return extractPDF(file); // normalizes internally
@@ -138,9 +111,8 @@ async function extractPDF(file) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
 
-    // PDF.js returns text items in stream order, not reading order. Group
-    // items into visual lines by Y position (transform[5], ±2px tolerance
-    // for baseline jitter), then sort each line by X (transform[4]).
+    // PDF.js gives text in stream order, not reading order. Group into lines
+    // by Y position (with tolerance for jitter), then sort each line by X.
     const Y_TOLERANCE = 2;
     const lineMap = new Map(); // quantised-Y → [{ x, str }]
 
@@ -163,7 +135,7 @@ async function extractPDF(file) {
       lineMap.get(bucketKey).push({ x, str: item.str });
     }
 
-    // Sort Y buckets descending (PDF Y grows upward; top of page = largest Y)
+    // PDF Y grows upward, so sort descending to get top-to-bottom order.
     const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
 
     const lines = sortedYs.map(y => {
@@ -177,8 +149,6 @@ async function extractPDF(file) {
   return normalizeResumeText(pageTexts.join("\n"));
 }
 
-// normalizeResumeText() lives in resume_parser.js (loaded before this script).
-
 async function extractDOCX(file) {
   if (!window.mammoth) throw new Error("mammoth not loaded");
   const ab = await file.arrayBuffer();
@@ -186,11 +156,7 @@ async function extractDOCX(file) {
   return result.value;
 }
 
-// Structured parsing (sections, experience/projects/skills/education/etc.),
-// flat-profile derivation, and the AI prompt/merge logic all live in
-// resume_parser.js — see FCV_buildStructuredProfile / FCV_deriveFlatProfile /
-// FCV_buildAIPrompt / FCV_mergeAIIntoStructured.
-
+// Structured parsing and AI prompt/merge logic live in resume_parser.js.
 function buildPrompt(fieldKey, profile, jobTitle, company, structured) {
   const { email, phone, ...safeProfile } = profile;
   let context = safeProfile;
@@ -258,7 +224,7 @@ async function callOpenAICompat(prompt, cfg) {
 
 async function generateWithAI(fieldKey, profile, jobTitle = "", company = "") {
   const cfg = await getProviderConfig();
-  const structured = await new Promise(r => chrome.storage.local.get("fcv_profile_structured", d => r(d.fcv_profile_structured)));
+  const structured = await storageGet("fcv_profile_structured");
   const prompt = buildPrompt(fieldKey, profile, jobTitle, company, structured);
 
   if (cfg.provider === "ollama") {
@@ -280,6 +246,22 @@ async function generateWithAI(fieldKey, profile, jobTitle = "", company = "") {
 }
 
 const $ = id => document.getElementById(id);
+
+// Builds an element in one call instead of create/assign/appendChild per line.
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "style" || k === "dataset") Object.assign(node[k], v);
+    else node[k] = v;
+  }
+  for (const child of [].concat(children)) {
+    if (child) node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+  }
+  return node;
+}
+
+const storageGet = (key) => new Promise(r => chrome.storage.local.get(key, d => r(d[key])));
+
 const status = (msg, color = "#FFFFFF") => {
   const statusEl = $("status");
   if (statusEl) {
@@ -291,9 +273,7 @@ const status = (msg, color = "#FFFFFF") => {
   }
 };
 
-// Excluded from the completeness metric: these are generated per-job, not
-// extracted from a resume, so counting them against completeness caps the
-// score artificially low no matter how thorough the extraction is.
+// Generated per-job, not extracted from a resume, so excluded from completeness.
 const NON_RESUME_FIELDS = new Set(["salary", "notice_period", "cover_letter", "motivation"]);
 
 async function updateProfileStats(profile) {
@@ -311,7 +291,7 @@ async function updateProfileStats(profile) {
     countEl.textContent = `${filledFields} / ${totalFields} core fields filled`;
   }
 
-  const structured = await new Promise(r => chrome.storage.local.get("fcv_profile_structured", d => r(d.fcv_profile_structured)));
+  const structured = await storageGet("fcv_profile_structured");
   const sectionsEl = document.getElementById("stat-sections");
   if (sectionsEl) {
     const arrays = structured ? [structured.experience, structured.projects, structured.education, structured.certifications, structured.awards] : [];
@@ -326,7 +306,7 @@ async function updateProfileStats(profile) {
 
   const welcomeScreen = document.getElementById("welcome-screen");
   if (welcomeScreen) {
-    const dismissed = await new Promise(r => chrome.storage.local.get("fcv_welcome_dismissed", d => r(d.fcv_welcome_dismissed)));
+    const dismissed = await storageGet("fcv_welcome_dismissed");
     if (filledFields === 0 && !dismissed) {
       welcomeScreen.classList.remove("hidden");
     } else {
@@ -335,7 +315,7 @@ async function updateProfileStats(profile) {
   }
 
   const badgeStatus = document.getElementById("badge-status");
-  const filename = await new Promise(r => chrome.storage.local.get("fcv_filename", d => r(d.fcv_filename)));
+  const filename = await storageGet("fcv_filename");
   if (badgeStatus) {
     if (filename) {
       badgeStatus.textContent = filename.toUpperCase();
@@ -395,10 +375,7 @@ function renderProfileView(profile) {
   container.textContent = "";
 
   if (!keys.length) {
-    const emptyState = document.createElement("div");
-    emptyState.className = "empty-state";
-    emptyState.textContent = "No profile yet. Select a file to begin.";
-    container.appendChild(emptyState);
+    container.appendChild(el("div", { className: "empty-state", textContent: "No profile yet. Select a file to begin." }));
     updateProfileStats({});
     return;
   }
@@ -408,29 +385,11 @@ function renderProfileView(profile) {
     const label = meta?.label || key;
     const val = profile[key] || "";
 
-    const row = document.createElement("div");
-    row.className = "profile-row";
-    row.dataset.key = key;
-
-    const labelSpan = document.createElement("span");
-    labelSpan.className = "field-label";
-    labelSpan.textContent = label;
-
-    const valueSpan = document.createElement("span");
-    valueSpan.className = "field-value";
-    valueSpan.title = val;
-    valueSpan.textContent = val.length > 60 ? val.slice(0, 57) + "…" : val;
-
-    const btn = document.createElement("button");
-    btn.className = "edit-btn";
-    btn.dataset.key = key;
-    btn.textContent = "[ EDIT ]";
-    btn.onclick = () => openEditModal(key, val);
-
-    row.appendChild(labelSpan);
-    row.appendChild(valueSpan);
-    row.appendChild(btn);
-    container.appendChild(row);
+    container.appendChild(el("div", { className: "profile-row", dataset: { key } }, [
+      el("span", { className: "field-label", textContent: label }),
+      el("span", { className: "field-value", title: val, textContent: val.length > 60 ? val.slice(0, 57) + "…" : val }),
+      el("button", { className: "edit-btn", dataset: { key }, textContent: "[ EDIT ]", onclick: () => openEditModal(key, val) }),
+    ]));
   });
 
   updateProfileStats(profile);
@@ -450,39 +409,19 @@ function closeModal() {
 }
 
 function showLearnBanner(key, value, fieldLabel) {
-  const banner = document.createElement("div");
-  banner.className = "learn-banner";
-
-  const titleSpan = document.createElement("span");
-  titleSpan.textContent = `💡 Learn "${fieldLabel}"?`;
-  banner.appendChild(titleSpan);
-
-  const valDiv = document.createElement("div");
-  valDiv.className = "learn-val";
-  valDiv.textContent = value.slice(0, 80) + (value.length > 80 ? "…" : "");
-  banner.appendChild(valDiv);
-
-  const btnsDiv = document.createElement("div");
-  btnsDiv.className = "learn-btns";
-
-  const btnYes = document.createElement("button");
-  btnYes.className = "btn-yes";
-  btnYes.textContent = "Save";
-  btnYes.onclick = async () => {
-    await updateProfile({ [key]: value });
-    banner.remove();
-    status("Learned: " + (FIELD_REGISTRY[key]?.label || key), "#FF8030");
-    renderProfileView(await getProfile());
-  };
-
-  const btnNo = document.createElement("button");
-  btnNo.className = "btn-no";
-  btnNo.textContent = "Dismiss";
-  btnNo.onclick = () => banner.remove();
-
-  btnsDiv.appendChild(btnYes);
-  btnsDiv.appendChild(btnNo);
-  banner.appendChild(btnsDiv);
+  const banner = el("div", { className: "learn-banner" }, [
+    el("span", { textContent: `💡 Learn "${fieldLabel}"?` }),
+    el("div", { className: "learn-val", textContent: value.slice(0, 80) + (value.length > 80 ? "…" : "") }),
+    el("div", { className: "learn-btns" }, [
+      el("button", { className: "btn-yes", textContent: "Save", onclick: async () => {
+        await updateProfile({ [key]: value });
+        banner.remove();
+        status("Learned: " + (FIELD_REGISTRY[key]?.label || key), "#FF8030");
+        renderProfileView(await getProfile());
+      } }),
+      el("button", { className: "btn-no", textContent: "Dismiss", onclick: () => banner.remove() }),
+    ]),
+  ]);
 
   const queue = $("learn-queue");
   if (queue) queue.prepend(banner);
@@ -495,81 +434,50 @@ async function renderAIPanel() {
 
   if (!Object.keys(profile).length) {
     container.textContent = "";
-    const emptyState = document.createElement("div");
-    emptyState.className = "empty-state";
-    emptyState.textContent = "Upload your resume first.";
-    container.appendChild(emptyState);
+    container.appendChild(el("div", { className: "empty-state", textContent: "Upload your resume first." }));
     return;
   }
 
   container.textContent = "";
 
-  const aiForm = document.createElement("div");
-  aiForm.className = "ai-form";
+  const jobTitleInput = el("input", { id: "ai-job-title", placeholder: "Job title (e.g. Frontend Engineer)", className: "ai-input" });
+  const companyInput = el("input", { id: "ai-company", placeholder: "Company name (optional)", className: "ai-input" });
+  container.appendChild(el("div", { className: "ai-form" }, [jobTitleInput, companyInput]));
 
-  const jobTitleInput = document.createElement("input");
-  jobTitleInput.id = "ai-job-title";
-  jobTitleInput.placeholder = "Job title (e.g. Frontend Engineer)";
-  jobTitleInput.className = "ai-input";
+  const resultArea = el("div", { id: "ai-result-area", className: "ai-result hidden" });
 
-  const companyInput = document.createElement("input");
-  companyInput.id = "ai-company";
-  companyInput.placeholder = "Company name (optional)";
-  companyInput.className = "ai-input";
+  const fieldBtns = el("div", { className: "ai-field-btns" },
+    [...AI_GENERATED_FIELDS].map(k => {
+      const btn = el("button", { className: "ai-gen-btn", textContent: (FIELD_REGISTRY[k]?.label || k).toUpperCase() });
+      btn.onclick = async () => {
+        const jobTitle = jobTitleInput.value.trim();
+        const company = companyInput.value.trim();
 
-  aiForm.appendChild(jobTitleInput);
-  aiForm.appendChild(companyInput);
-  container.appendChild(aiForm);
+        resultArea.classList.remove("hidden");
+        resultArea.textContent = "Generating…";
+        btn.disabled = true;
+        try {
+          const text = await generateWithAI(k, profile, jobTitle, company);
+          resultArea.textContent = "";
 
-  const fieldBtns = document.createElement("div");
-  fieldBtns.className = "ai-field-btns";
+          const copyBtn = el("button", { className: "copy-btn", textContent: "Copy" });
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(text);
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+          };
 
-  const resultArea = document.createElement("div");
-  resultArea.id = "ai-result-area";
-  resultArea.className = "ai-result hidden";
-
-  AI_GENERATED_FIELDS.forEach(k => {
-    const btn = document.createElement("button");
-    btn.className = "ai-gen-btn";
-    btn.textContent = (FIELD_REGISTRY[k]?.label || k).toUpperCase();
-    btn.onclick = async () => {
-      const jobTitle = jobTitleInput.value.trim();
-      const company = companyInput.value.trim();
-
-      resultArea.classList.remove("hidden");
-      resultArea.textContent = "Generating…";
-      btn.disabled = true;
-      try {
-        const text = await generateWithAI(k, profile, jobTitle, company);
-        resultArea.textContent = "";
-
-        const label = document.createElement("div");
-        label.className = "result-label";
-        label.textContent = FIELD_REGISTRY[k]?.label;
-
-        const textDiv = document.createElement("div");
-        textDiv.className = "result-text";
-        textDiv.textContent = text;
-
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "copy-btn";
-        copyBtn.textContent = "Copy";
-        copyBtn.onclick = () => {
-          navigator.clipboard.writeText(text);
-          copyBtn.textContent = "Copied!";
-          setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
-        };
-
-        resultArea.appendChild(label);
-        resultArea.appendChild(textDiv);
-        resultArea.appendChild(copyBtn);
-      } catch (err) {
-        resultArea.textContent = "Error: " + err.message;
-      }
-      btn.disabled = false;
-    };
-    fieldBtns.appendChild(btn);
-  });
+          resultArea.appendChild(el("div", { className: "result-label", textContent: FIELD_REGISTRY[k]?.label }));
+          resultArea.appendChild(el("div", { className: "result-text", textContent: text }));
+          resultArea.appendChild(copyBtn);
+        } catch (err) {
+          resultArea.textContent = "Error: " + err.message;
+        }
+        btn.disabled = false;
+      };
+      return btn;
+    })
+  );
 
   container.appendChild(fieldBtns);
   container.appendChild(resultArea);
@@ -582,178 +490,59 @@ async function renderSettings() {
 
   container.textContent = "";
 
-  const section1 = document.createElement("div");
-  section1.className = "settings-section";
+  const btnOllama = el("button", { className: "provider-btn" + (cfg.provider === "ollama" ? " active" : ""), textContent: "Ollama (Local)" });
+  const btnExt = el("button", { className: "provider-btn" + (cfg.provider === "openai_compat" ? " active" : ""), textContent: "External API" });
 
-  const title1 = document.createElement("div");
-  title1.className = "settings-section-title";
-  title1.textContent = "AI Provider";
-  section1.appendChild(title1);
+  const inputUrl = el("input", { id: "ollama-url", className: "ai-input", value: cfg.ollamaUrl, placeholder: "http://localhost:11434" });
+  const inputModel = el("input", { id: "ollama-model", className: "ai-input", value: cfg.ollamaModel, placeholder: "llama3.2" });
+  const testBtn = el("button", { id: "test-ollama-btn", className: "pill-btn secondary", textContent: "Test Connection", style: { marginTop: "12px", width: "100%" } });
+  const testResult = el("div", { id: "ollama-test-result", style: { fontSize: "11px", marginTop: "8px", fontWeight: "700" } });
 
-  const toggle = document.createElement("div");
-  toggle.className = "provider-toggle";
+  const ollamaDiv = el("div", { className: cfg.provider !== "ollama" ? "hidden" : "" }, [
+    el("div", { className: "privacy-badge", textContent: "✦ Your data never leaves your device" }),
+    el("label", { className: "settings-label", textContent: "Ollama URL" }),
+    inputUrl,
+    el("label", { className: "settings-label", textContent: "Model" }),
+    inputModel,
+    el("div", { className: "settings-hint", textContent: "Install: brew install ollama or ollama.com\nPull model: ollama pull llama3.2\nStart: ollama serve" }),
+    testBtn,
+    testResult,
+  ]);
 
-  const btnOllama = document.createElement("button");
-  btnOllama.className = "provider-btn" + (cfg.provider === "ollama" ? " active" : "");
-  btnOllama.textContent = "Ollama (Local)";
+  const inputFallbackUrl = el("input", { id: "fallback-url", className: "ai-input", value: cfg.fallbackUrl, placeholder: "https://api.groq.com/openai/v1" });
+  const inputFallbackModel = el("input", { id: "fallback-model", className: "ai-input", value: cfg.fallbackModel, placeholder: "llama-3.1-8b-instant" });
+  const inputApiKey = el("input", { id: "ext-api-key", type: "password", className: "ai-input", value: cfg.apiKey, placeholder: "sk-..." });
 
-  const btnExt = document.createElement("button");
-  btnExt.className = "provider-btn" + (cfg.provider === "openai_compat" ? " active" : "");
-  btnExt.textContent = "External API";
+  const extDiv = el("div", { className: cfg.provider !== "openai_compat" ? "hidden" : "" }, [
+    el("div", { className: "privacy-badge warn", textContent: "⚠ Profile data will be sent externally" }),
+    el("label", { className: "settings-label", textContent: "Base URL" }),
+    inputFallbackUrl,
+    el("label", { className: "settings-label", textContent: "Model" }),
+    inputFallbackModel,
+    el("label", { className: "settings-label", textContent: "API Key" }),
+    inputApiKey,
+    el("div", { className: "settings-hint", textContent: "Works with: Groq · OpenRouter · Together · OpenAI · any OpenAI-compatible endpoint." }),
+  ]);
 
-  toggle.appendChild(btnOllama);
-  toggle.appendChild(btnExt);
-  section1.appendChild(toggle);
+  const saveBtn = el("button", { id: "save-provider-btn", className: "pill-btn primary", textContent: "Save Settings", style: { marginTop: "16px", width: "100%" } });
 
-  const ollamaDiv = document.createElement("div");
-  ollamaDiv.className = cfg.provider !== "ollama" ? "hidden" : "";
-
-  const badgePrivacy = document.createElement("div");
-  badgePrivacy.className = "privacy-badge";
-  badgePrivacy.textContent = "✦ Your data never leaves your device";
-  ollamaDiv.appendChild(badgePrivacy);
-
-  const labelUrl = document.createElement("label");
-  labelUrl.className = "settings-label";
-  labelUrl.textContent = "Ollama URL";
-  ollamaDiv.appendChild(labelUrl);
-
-  const inputUrl = document.createElement("input");
-  inputUrl.id = "ollama-url";
-  inputUrl.className = "ai-input";
-  inputUrl.value = cfg.ollamaUrl;
-  inputUrl.placeholder = "http://localhost:11434";
-  ollamaDiv.appendChild(inputUrl);
-
-  const labelModel = document.createElement("label");
-  labelModel.className = "settings-label";
-  labelModel.textContent = "Model";
-  ollamaDiv.appendChild(labelModel);
-
-  const inputModel = document.createElement("input");
-  inputModel.id = "ollama-model";
-  inputModel.className = "ai-input";
-  inputModel.value = cfg.ollamaModel;
-  inputModel.placeholder = "llama3.2";
-  ollamaDiv.appendChild(inputModel);
-
-  const hintOllama = document.createElement("div");
-  hintOllama.className = "settings-hint";
-  hintOllama.textContent = "Install: brew install ollama or ollama.com\nPull model: ollama pull llama3.2\nStart: ollama serve";
-  ollamaDiv.appendChild(hintOllama);
-
-  const testBtn = document.createElement("button");
-  testBtn.id = "test-ollama-btn";
-  testBtn.className = "pill-btn secondary";
-  testBtn.style.marginTop = "12px";
-  testBtn.style.width = "100%";
-  testBtn.textContent = "Test Connection";
-  ollamaDiv.appendChild(testBtn);
-
-  const testResult = document.createElement("div");
-  testResult.id = "ollama-test-result";
-  testResult.style.fontSize = "11px";
-  testResult.style.marginTop = "8px";
-  testResult.style.fontWeight = "700";
-  ollamaDiv.appendChild(testResult);
-
-  section1.appendChild(ollamaDiv);
-
-  const extDiv = document.createElement("div");
-  extDiv.className = cfg.provider !== "openai_compat" ? "hidden" : "";
-
-  const badgeWarn = document.createElement("div");
-  badgeWarn.className = "privacy-badge warn";
-  badgeWarn.textContent = "⚠ Profile data will be sent externally";
-  extDiv.appendChild(badgeWarn);
-
-  const labelFallbackUrl = document.createElement("label");
-  labelFallbackUrl.className = "settings-label";
-  labelFallbackUrl.textContent = "Base URL";
-  extDiv.appendChild(labelFallbackUrl);
-
-  const inputFallbackUrl = document.createElement("input");
-  inputFallbackUrl.id = "fallback-url";
-  inputFallbackUrl.className = "ai-input";
-  inputFallbackUrl.value = cfg.fallbackUrl;
-  inputFallbackUrl.placeholder = "https://api.groq.com/openai/v1";
-  extDiv.appendChild(inputFallbackUrl);
-
-  const labelFallbackModel = document.createElement("label");
-  labelFallbackModel.className = "settings-label";
-  labelFallbackModel.textContent = "Model";
-  extDiv.appendChild(labelFallbackModel);
-
-  const inputFallbackModel = document.createElement("input");
-  inputFallbackModel.id = "fallback-model";
-  inputFallbackModel.className = "ai-input";
-  inputFallbackModel.value = cfg.fallbackModel;
-  inputFallbackModel.placeholder = "llama-3.1-8b-instant";
-  extDiv.appendChild(inputFallbackModel);
-
-  const labelApiKey = document.createElement("label");
-  labelApiKey.className = "settings-label";
-  labelApiKey.textContent = "API Key";
-  extDiv.appendChild(labelApiKey);
-
-  const inputApiKey = document.createElement("input");
-  inputApiKey.id = "ext-api-key";
-  inputApiKey.type = "password";
-  inputApiKey.className = "ai-input";
-  inputApiKey.value = cfg.apiKey;
-  inputApiKey.placeholder = "sk-...";
-  extDiv.appendChild(inputApiKey);
-
-  const hintExt = document.createElement("div");
-  hintExt.className = "settings-hint";
-  hintExt.textContent = "Works with: Groq · OpenRouter · Together · OpenAI · any OpenAI-compatible endpoint.";
-  extDiv.appendChild(hintExt);
-
-  section1.appendChild(extDiv);
-
-  const saveBtn = document.createElement("button");
-  saveBtn.id = "save-provider-btn";
-  saveBtn.className = "pill-btn primary";
-  saveBtn.style.marginTop = "16px";
-  saveBtn.style.width = "100%";
-  saveBtn.textContent = "Save Settings";
-  section1.appendChild(saveBtn);
-
+  const section1 = el("div", { className: "settings-section" }, [
+    el("div", { className: "settings-section-title", textContent: "AI Provider" }),
+    el("div", { className: "provider-toggle" }, [btnOllama, btnExt]),
+    ollamaDiv,
+    extDiv,
+    saveBtn,
+  ]);
   container.appendChild(section1);
+  container.appendChild(el("hr", { className: "divider" }));
 
-  const hr = document.createElement("hr");
-  hr.className = "divider";
-  container.appendChild(hr);
+  const exportBtn = el("button", { id: "export-profile-btn", className: "pill-btn secondary", textContent: "Export JSON", style: { flex: "1" } });
+  const nukeBtn = el("button", { id: "nuke-btn", className: "pill-btn danger", textContent: "Delete All", style: { flex: "1" } });
 
-  const section2 = document.createElement("div");
-  section2.className = "settings-section";
-
-  const title2 = document.createElement("div");
-  title2.className = "settings-section-title";
-  title2.textContent = "Profile Data";
-  section2.appendChild(title2);
-
-  const flexDiv = document.createElement("div");
-  flexDiv.style.display = "flex";
-  flexDiv.style.gap = "10px";
-
-  const exportBtn = document.createElement("button");
-  exportBtn.id = "export-profile-btn";
-  exportBtn.className = "pill-btn secondary";
-  exportBtn.style.flex = "1";
-  exportBtn.textContent = "Export JSON";
-
-  const nukeBtn = document.createElement("button");
-  nukeBtn.id = "nuke-btn";
-  nukeBtn.className = "pill-btn danger";
-  nukeBtn.style.flex = "1";
-  nukeBtn.textContent = "Delete All";
-
-  flexDiv.appendChild(exportBtn);
-  flexDiv.appendChild(nukeBtn);
-  section2.appendChild(flexDiv);
-
-  container.appendChild(section2);
+  container.appendChild(el("div", { className: "settings-section" }, [
+    el("div", { className: "settings-section-title", textContent: "Profile Data" }),
+    el("div", { style: { display: "flex", gap: "10px" } }, [exportBtn, nukeBtn]),
+  ]));
 
   btnOllama.onclick = () => {
     btnOllama.classList.add("active");
@@ -842,9 +631,7 @@ function switchTab(tabId) {
   if (tabId === "tab-settings") renderSettings();
 }
 
-// Builds the structured-schema prompt (FCV_buildAIPrompt, resume_parser.js)
-// from normalized, section-marked text and returns the raw parsed JSON.
-// Validation/sanitization happens in FCV_mergeAIIntoStructured.
+// Sends the resume to the AI and returns its raw parsed JSON response.
 async function parseResumeWithAI(resumeText) {
   const cfg = await getProviderConfig();
   const prompt = FCV_buildAIPrompt(resumeText);
@@ -893,12 +680,11 @@ async function init() {
       try {
         const text = await extractTextFromFile(file);
 
-        // Phase 1: Instant deterministic structured parse (no AI required).
+        // Instant local parse first, no AI required.
         const structured = FCV_buildStructuredProfile(text);
         let flat = FCV_deriveFlatProfile(structured);
 
-        // Save immediately so the UI updates fast; keep any values the user
-        // already had (manual edits / previously learned fields) intact.
+        // Save right away so the UI updates fast, keeping existing values.
         const current = await getProfile();
         flat = { ...flat, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) };
         await setProfile(flat);
@@ -906,7 +692,7 @@ async function init() {
         await renderProfileView(flat);
         status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FF8030");
 
-        // Phase 2: Asynchronous AI Enrichment (optional — additive only)
+        // Then enrich with AI in the background, if configured.
         try {
           const cfg = await getProviderConfig();
           const isOllama = cfg.provider === "ollama";
@@ -916,7 +702,7 @@ async function init() {
             status("Enriching profile with AI…");
             const parsedAI = await parseResumeWithAI(text);
 
-            const structuredNow = (await new Promise(r => chrome.storage.local.get("fcv_profile_structured", d => r(d.fcv_profile_structured)))) || structured;
+            const structuredNow = (await storageGet("fcv_profile_structured")) || structured;
             const mergedStructured = FCV_mergeAIIntoStructured(structuredNow, parsedAI);
             const mergedFlat = FCV_deriveFlatProfile(mergedStructured);
 
