@@ -32,7 +32,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["field_registry.js", "content.js"],
       "css": ["overlay.css"],
       "run_at": "document_idle"
     }
@@ -44,8 +44,7 @@
         "pdf.min.js",
         "pdf.worker.min.js",
         "mammoth.browser.min.js",
-        "icons/*.svg",
-        "field_registry.json"
+        "icons/*.svg"
       ],
       "matches": ["<all_urls>"]
     }

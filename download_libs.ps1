@@ -11,7 +11,7 @@ foreach ($lib in $libs.Keys) {
     if (-not (Test-Path $lib)) {
         Write-Host "Downloading $lib from CDN..." -ForegroundColor Cyan
         try {
-            Invoke-WebRequest -Uri $libs[$lib] -OutFile $lib
+            Invoke-WebRequest -Uri $libs[$lib] -OutFile $lib -UseBasicParsing
             Write-Host "Successfully downloaded $lib!" -ForegroundColor Green
         } catch {
             Write-Host "Error downloading $lib : $_" -ForegroundColor Red

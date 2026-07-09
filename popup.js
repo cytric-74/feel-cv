@@ -47,34 +47,36 @@ if (typeof chrome === "undefined" || !chrome.storage) {
   };
 }
 
-const FIELD_REGISTRY = {
-  full_name: { label: "Full Name", patterns: ["name", "full name", "your name", "applicant name"] },
-  first_name: { label: "First Name", patterns: ["first name", "given name", "forename"] },
-  last_name: { label: "Last Name", patterns: ["last name", "surname", "family name"] },
-  email: { label: "Email", patterns: ["email", "e-mail", "mail", "email address"] },
-  phone: { label: "Phone", patterns: ["phone", "mobile", "cell", "telephone", "contact number"] },
-  location: { label: "Location / City", patterns: ["city", "location", "address", "where are you based", "current location"] },
-  linkedin: { label: "LinkedIn URL", patterns: ["linkedin", "linkedin url", "linkedin profile"] },
-  github: { label: "GitHub URL", patterns: ["github", "github url", "portfolio", "website", "personal site"] },
-  portfolio: { label: "Portfolio URL", patterns: ["portfolio", "website", "personal site", "personal url"] },
-  summary: { label: "About / Summary", patterns: ["summary", "about yourself", "about you", "brief bio", "profile summary", "professional summary", "tell us about yourself", "short bio", "bio", "describe yourself"] },
-  headline: { label: "Professional Headline", patterns: ["headline", "title", "job title", "current role", "current position", "designation"] },
-  years_experience: { label: "Years of Experience", patterns: ["years of experience", "total experience", "how many years", "work experience"] },
-  current_company: { label: "Current Employer", patterns: ["current company", "current employer", "current organization", "employer"] },
-  current_role: { label: "Current Job Title", patterns: ["current role", "current position", "current title", "current designation"] },
-  work_history: { label: "Work History", patterns: ["work history", "employment history", "past experience", "previous companies"] },
-  degree: { label: "Degree", patterns: ["degree", "qualification", "education", "highest qualification", "academic qualification"] },
-  university: { label: "University / College", patterns: ["university", "college", "institution", "school", "alma mater"] },
-  graduation_year: { label: "Graduation Year", patterns: ["graduation year", "year of graduation", "passed out", "batch"] },
-  major: { label: "Field of Study", patterns: ["major", "field of study", "specialization", "stream", "branch", "course"] },
-  skills: { label: "Skills", patterns: ["skills", "technologies", "tech stack", "tools", "expertise", "competencies", "technical skills"] },
-  languages: { label: "Programming Languages", patterns: ["programming languages", "languages known", "coding languages"] },
-  cover_letter: { label: "Cover Letter", patterns: ["cover letter", "why should we hire", "motivation letter", "statement of purpose"] },
-  motivation: { label: "Why this role / company", patterns: ["why do you want", "why are you interested", "why this company", "why this role", "what attracts you", "what interests you", "reason for applying"] },
-  strengths: { label: "Key Strengths", patterns: ["strengths", "greatest strengths", "what are your strengths", "key strengths"] },
-  achievements: { label: "Achievements", patterns: ["achievements", "accomplishments", "notable projects", "key projects", "proud of"] },
-  salary: { label: "Expected Salary", patterns: ["expected salary", "salary expectation", "ctc", "expected ctc", "compensation"] },
-  notice_period: { label: "Notice Period", patterns: ["notice period", "when can you join", "availability", "how soon"] },
+// Use the shared registry loaded by field_registry.js; fall back to a minimal
+// inline copy so the popup still works if the script order ever changes.
+const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
+  full_name:        { label: "Full Name",              patterns: ["full name", "your name", "applicant name", "name"] },
+  first_name:       { label: "First Name",             patterns: ["first name", "given name", "forename"] },
+  last_name:        { label: "Last Name",              patterns: ["last name", "surname", "family name"] },
+  email:            { label: "Email",                  patterns: ["email address", "email", "e-mail", "mail"] },
+  phone:            { label: "Phone",                  patterns: ["phone number", "mobile number", "contact number", "telephone", "mobile", "phone"] },
+  location:         { label: "Location / City",        patterns: ["current location", "where are you based", "city", "location", "address"] },
+  linkedin:         { label: "LinkedIn URL",           patterns: ["linkedin profile", "linkedin url", "linkedin"] },
+  github:           { label: "GitHub URL",             patterns: ["github url", "github", "portfolio", "website", "personal site"] },
+  portfolio:        { label: "Portfolio URL",          patterns: ["portfolio url", "portfolio", "website", "personal url"] },
+  summary:          { label: "About / Summary",        patterns: ["professional summary", "profile summary", "about yourself", "tell us about yourself", "describe yourself", "summary", "bio"] },
+  headline:         { label: "Professional Headline",  patterns: ["current position", "current role", "job title", "designation", "headline"] },
+  years_experience: { label: "Years of Experience",   patterns: ["years of experience", "total experience", "how many years"] },
+  current_company:  { label: "Current Employer",      patterns: ["current organization", "current employer", "current company", "employer"] },
+  current_role:     { label: "Current Job Title",     patterns: ["current designation", "current position", "current title", "current role"] },
+  work_history:     { label: "Work History",           patterns: ["employment history", "work history", "past experience"] },
+  degree:           { label: "Degree",                 patterns: ["highest qualification", "academic qualification", "qualification", "education", "degree"] },
+  university:       { label: "University / College",  patterns: ["university", "college", "institution", "school", "alma mater"] },
+  graduation_year:  { label: "Graduation Year",       patterns: ["graduation year", "year of graduation", "passed out", "batch"] },
+  major:            { label: "Field of Study",         patterns: ["field of study", "specialization", "stream", "branch", "course", "major"] },
+  skills:           { label: "Skills",                 patterns: ["technical skills", "tech stack", "technologies", "competencies", "expertise", "tools", "skills"] },
+  languages:        { label: "Programming Languages",  patterns: ["programming languages", "languages known", "coding languages"] },
+  cover_letter:     { label: "Cover Letter",           patterns: ["motivation letter", "statement of purpose", "cover letter", "why should we hire"] },
+  motivation:       { label: "Why this role / company",patterns: ["reason for applying", "what interests you", "why are you interested", "why this company", "why this role", "why do you want"] },
+  strengths:        { label: "Key Strengths",          patterns: ["greatest strengths", "what are your strengths", "key strengths", "strengths"] },
+  achievements:     { label: "Achievements",           patterns: ["notable projects", "key projects", "accomplishments", "proud of", "achievements"] },
+  salary:           { label: "Expected Salary",        patterns: ["salary expectation", "expected salary", "expected ctc", "compensation", "ctc"] },
+  notice_period:    { label: "Notice Period",          patterns: ["when can you join", "notice period", "availability", "how soon"] },
 };
 
 const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", "achievements", "summary"]);
@@ -112,22 +114,83 @@ async function extractTextFromFile(file) {
 async function extractPDF(file) {
   const pdfjsLib = window.pdfjsLib || window["pdfjs-dist/build/pdf"];
   if (!pdfjsLib) {
-    throw new Error("pdf.js library is not loaded. Please ensure that pdf.min.js and pdf.worker.min.js exist in the extension folder and that you have run the download script.");
+    throw new Error("pdf.js library is not loaded. Please ensure pdf.min.js and pdf.worker.min.js exist in the extension folder.");
   }
   try {
     pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL("pdf.worker.min.js");
   } catch (err) {
-    console.warn("Could not set PDF worker source URL, relying on inline worker:", err);
+    console.warn("Could not set PDF worker source URL:", err);
   }
+
   const ab = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
-  let text = "";
+  const pageTexts = [];
+
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map(s => s.str).join(" ") + "\n";
+
+    // ── Layout-aware reconstruction ──────────────────────────────────────
+    // Each item has a transform matrix [scaleX, skewX, skewY, scaleY, tx, ty].
+    // ty (transform[5]) is the Y position on the page; tx (transform[4]) is X.
+    // Group items into visual lines by quantising Y to ±2 px tolerance,
+    // then sort each line by X to restore reading order.
+
+    const Y_TOLERANCE = 2;
+    const lineMap = new Map(); // quantised-Y → [{ x, str }]
+
+    for (const item of content.items) {
+      if (!item.str) continue;
+      const rawY = item.transform[5];
+      const x    = item.transform[4];
+
+      // Find an existing bucket whose Y is within tolerance
+      let bucketKey = null;
+      for (const key of lineMap.keys()) {
+        if (Math.abs(key - rawY) <= Y_TOLERANCE) {
+          bucketKey = key;
+          break;
+        }
+      }
+      if (bucketKey === null) {
+        bucketKey = rawY;
+        lineMap.set(bucketKey, []);
+      }
+      lineMap.get(bucketKey).push({ x, str: item.str });
+    }
+
+    // Sort Y buckets descending (PDF Y grows upward; top of page = largest Y)
+    const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
+
+    const lines = sortedYs.map(y => {
+      const items = lineMap.get(y).sort((a, b) => a.x - b.x);
+      return items.map(it => it.str).join(" ").trim();
+    }).filter(Boolean);
+
+    pageTexts.push(lines.join("\n"));
   }
-  return text;
+
+  return normalizeResumeText(pageTexts.join("\n"));
+}
+
+/**
+ * Post-extraction text normalisation.
+ * Runs on the reconstructed line-based text before parsing.
+ */
+function normalizeResumeText(text) {
+  // Collapse 3+ consecutive spaces → single space
+  text = text.replace(/ {3,}/g, " ");
+
+  // Fix soft/wrapped hyphenation: "im- prove" → "improve"
+  // Only merge when the suffix is a lowercase word (safe heuristic)
+  text = text.replace(/-\s+([a-z])/g, "$1");
+
+  // Insert newline before common section headings that may appear mid-line.
+  // Patterns are generic heading words, not content-specific.
+  const HEADING_RE = /(?<=[\w,;.])\s+((?:Work\s+)?Experience|Projects?|(?:Technical\s+)?Skills|Education|Certifications?|Awards?|Achievements?|Summary|Profile|Objective|Publications?|Volunteer(?:ing)?|Interests?|References?|Languages?|Courses?|Honours?|Activities)/gi;
+  text = text.replace(HEADING_RE, "\n$1");
+
+  return text.trim();
 }
 
 async function extractDOCX(file) {
@@ -137,87 +200,417 @@ async function extractDOCX(file) {
   return result.value;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GENERIC RESUME PARSER  (section-based, no hardcoded sample values)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Known section heading keywords used to split the resume into named sections.
+ * Generic — not tied to any particular resume's content.
+ */
+const SECTION_HEADINGS = [
+  "experience", "work experience", "professional experience", "employment", "employment history",
+  "internship", "internships",
+  "education", "academic background", "academic qualifications",
+  "skills", "technical skills", "core competencies", "competencies", "technologies",
+  "projects", "project experience", "personal projects", "academic projects",
+  "certifications", "certification", "licenses",
+  "awards", "achievements", "honours", "honors",
+  "summary", "profile", "objective", "professional summary", "career objective",
+  "publications", "research",
+  "languages", "programming languages",
+  "volunteer", "volunteering", "extra-curricular", "activities", "interests"
+];
+
+// Regex that matches a line if it looks like a section heading.
+// Heuristic: line is short, starts with a known keyword, has no sentence punctuation.
+const HEADING_LINE_RE = new RegExp(
+  `^(?:${SECTION_HEADINGS.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})[:\s]*$`,
+  "i"
+);
+
+/**
+ * Split resume text into named sections.
+ * Returns an array of { heading: string, lines: string[] }.
+ * A leading section with heading "header" captures lines before the first heading.
+ */
+function splitResumeSections(text) {
+  const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const sections = [];
+  let current = { heading: "header", lines: [] };
+
+  for (const line of rawLines) {
+    if (HEADING_LINE_RE.test(line)) {
+      if (current.lines.length > 0 || current.heading !== "header") {
+        sections.push(current);
+      }
+      current = { heading: line.toLowerCase().replace(/:$/, "").trim(), lines: [] };
+    } else {
+      current.lines.push(line);
+    }
+  }
+  if (current.lines.length > 0) sections.push(current);
+  return sections;
+}
+
+/**
+ * Extract contact fields from the full text using robust regexes.
+ * These are the most reliable fields and should be set first.
+ */
+function extractContactInfo(text) {
+  const info = {};
+
+  // Email
+  const emailM = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  if (emailM) info.email = emailM[0];
+
+  // Phone — allows international formats, extensions, separators
+  // Requires at least 7 digits and starts with optional + or digit
+  const phoneM = text.match(/(\+?[\d][\d\s\-().]{6,18}[\d])/);
+  if (phoneM) {
+    const digits = phoneM[1].replace(/\D/g, "");
+    // Sanity: between 7 and 15 digits
+    if (digits.length >= 7 && digits.length <= 15) {
+      info.phone = phoneM[1].trim();
+    }
+  }
+
+  // LinkedIn
+  const liM = text.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_%]+)/i);
+  if (liM) info.linkedin = "https://linkedin.com/in/" + liM[1];
+
+  // GitHub
+  const ghM = text.match(/github\.com\/([a-zA-Z0-9\-_%]+)/i);
+  if (ghM) info.github = "https://github.com/" + ghM[1];
+
+  // Portfolio / personal site (not github/linkedin)
+  const portM = text.match(/https?:\/\/(?!(?:www\.)?(?:linkedin|github)\.)([a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,}[^\s]*)/i);
+  if (portM) info.portfolio = portM[0];
+
+  return info;
+}
+
+/**
+ * Attempt to extract the candidate's name from the top lines of the resume.
+ * Strategy: Look at the first 8 non-empty lines for a short line that looks
+ * like a proper name (title-cased or ALL-CAPS words, no @ / http / digits at start,
+ * no sentence punctuation, 2–5 words).
+ */
+function extractName(lines) {
+  // Proper name: 2-5 words, each word capitalised or all-caps, no special chars
+  const NAME_RE = /^([A-Z][a-zA-Z'-]+)(\s[A-Z][a-zA-Z'-]+){1,4}$/;
+  // All-caps variant
+  const ALLCAPS_RE = /^([A-Z]{2,})(\s[A-Z]{2,}){1,4}$/;
+
+  for (const line of lines.slice(0, 8)) {
+    if (line.includes("@") || line.includes("http") || /^\d/.test(line)) continue;
+    if (line.length < 3 || line.length > 60) continue;
+    // Skip lines that look like contact info or URLs
+    if (/[|•·,;@]/.test(line) && line.split(/[|•·,;@]/).length > 2) continue;
+    // Skip lines that are clearly headings (all-caps single word)
+    const words = line.trim().split(/\s+/);
+    if (words.length === 1 && words[0] === words[0].toUpperCase()) continue;
+
+    if (NAME_RE.test(line) || ALLCAPS_RE.test(line)) {
+      return line.trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse experience entries from an experience section's lines.
+ * Returns { current_company, current_role, work_history, years_experience }.
+ *
+ * Heuristic rules (generic):
+ * - A line that looks like a role title often follows a company name.
+ * - Date ranges identify the temporal extent of a role.
+ * - The first entry is assumed to be the most recent (current) role.
+ */
+function extractExperience(sectionLines) {
+  // Date range pattern: covers "Jan 2022 – Present", "2020 - 2023", "Mar 2021 — Current", etc.
+  const DATE_RANGE_RE = /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s)?\d{4}\s*[–—\-]\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?(?:\d{4}|present|current|now|ongoing)/i;
+
+  // Role/title keywords — generic occupational words
+  const ROLE_KEYWORDS_RE = /\b(?:engineer|developer|analyst|manager|designer|scientist|architect|lead|consultant|specialist|coordinator|officer|director|associate|intern|researcher|executive|head|vp|cto|ceo|founder|staff|senior|junior|principal|full.?stack|front.?end|back.?end|devops|data|ml|ai|software|product|project|program|qa|sre|cloud|mobile|embedded|platform)\b/i;
+
+  const entries = [];
+  let i = 0;
+
+  while (i < sectionLines.length) {
+    const line = sectionLines[i];
+
+    // Lines with a date range anchor an experience entry
+    if (DATE_RANGE_RE.test(line)) {
+      // Look back up to 2 lines for company / role
+      const prev1 = sectionLines[i - 1] || "";
+      const prev2 = sectionLines[i - 2] || "";
+      const next1 = sectionLines[i + 1] || "";
+
+      let company = "", role = "";
+
+      // Determine which adjacent lines are role vs company:
+      // Prefer: line containing role keywords = role, other = company
+      const candidates = [prev2, prev1, line, next1].filter(l => l && !DATE_RANGE_RE.test(l) && l.length > 1 && l.length < 80);
+
+      for (const c of candidates) {
+        if (!role && ROLE_KEYWORDS_RE.test(c)) { role = c.trim(); }
+        else if (!company && c !== role && c.length > 1) { company = c.trim(); }
+      }
+
+      // If role and company are still ambiguous, use positional order
+      if (!role && !company) {
+        if (prev1) company = prev1.trim();
+      } else if (!company && prev1 && prev1 !== role) {
+        company = prev1.trim();
+      } else if (!role && prev1 && prev1 !== company) {
+        role = prev1.trim();
+      }
+
+      if (company || role) {
+        entries.push({ company, role, dateRange: line.match(DATE_RANGE_RE)?.[0] || "" });
+      }
+    }
+    i++;
+  }
+
+  if (!entries.length) return {};
+
+  const result = {};
+  const first = entries[0];
+  if (first.company) result.current_company = first.company;
+  if (first.role)    result.current_role    = first.role;
+
+  // Build compact work_history summary
+  const historyParts = entries
+    .map(e => [e.company, e.role, e.dateRange].filter(Boolean).join(" · "))
+    .filter(Boolean);
+  if (historyParts.length) result.work_history = historyParts.join(" | ");
+
+  // Years of experience: count from earliest start year to latest (or present)
+  const years = [];
+  for (const e of entries) {
+    const yMatch = e.dateRange.match(/\b(19|20)(\d{2})\b/g);
+    if (yMatch) yMatch.forEach(y => years.push(parseInt(y, 10)));
+  }
+  if (years.length >= 2) {
+    const span = new Date().getFullYear() - Math.min(...years);
+    if (span > 0 && span < 60) result.years_experience = `${span}+ years`;
+  }
+
+  return result;
+}
+
+/**
+ * Parse education from an education section's lines.
+ * Returns { degree, university, graduation_year, major }.
+ */
+function extractEducation(sectionLines) {
+  const result = {};
+
+  // Generic degree-level keywords
+  const DEGREE_RE = /\b(?:bachelor|master|doctor|phd|b\.?tech|m\.?tech|b\.?e\.?|m\.?e\.?|b\.?sc|m\.?sc|b\.?com|mba|diploma|associate|a\.?s\.?|b\.?s\.?|m\.?s\.?|b\.?a\.?|m\.?a\.?|llb|llm|md|dds|jd|honours?)\b/i;
+  // Generic institution keywords
+  const INST_RE = /\b(?:university|college|institute|school|academy|polytechnic|iit|nit|bits|mit|stanford|oxford|cambridge|iisc|iim)\b/i;
+  // Major / field of study keywords
+  const MAJOR_RE = /\b(?:computer science|information technology|software engineering|electrical|mechanical|civil|chemical|data science|artificial intelligence|machine learning|mathematics|physics|biology|finance|economics|management|business|commerce|law|medicine|nursing|psychology|sociology)\b/i;
+
+  const years = [];
+
+  for (const line of sectionLines) {
+    if (!result.degree && DEGREE_RE.test(line) && line.length < 120) {
+      result.degree = line.trim();
+    }
+    if (!result.university && INST_RE.test(line) && line.length < 120) {
+      result.university = line.trim();
+    }
+    if (!result.major && MAJOR_RE.test(line) && line.length < 120) {
+      // Try to extract just the field name rather than the full line
+      const mMatch = line.match(MAJOR_RE);
+      result.major = mMatch ? line.trim() : undefined;
+    }
+    // Collect all 4-digit years
+    const yMatches = line.match(/\b(19|20)\d{2}\b/g);
+    if (yMatches) yMatches.forEach(y => years.push(parseInt(y, 10)));
+  }
+
+  // Graduation year: latest year found (expected/actual completion)
+  if (years.length) {
+    result.graduation_year = String(Math.max(...years));
+  }
+
+  return result;
+}
+
+/**
+ * Extract skills from skills/technical-skills/competencies section lines.
+ * Returns a comma-separated string of skill tokens.
+ */
+function extractSkills(sectionLines) {
+  const tokens = [];
+
+  for (const line of sectionLines) {
+    // Split on common delimiters: comma, pipe, bullet, semicolon, em-dash
+    const parts = line.split(/[,|•·;–—]/).map(p => p.trim()).filter(p => p.length > 0 && p.length < 60);
+    tokens.push(...parts);
+  }
+
+  return [...new Set(tokens)].join(", ");
+}
+
+/**
+ * Extract programming languages from skills text.
+ * Looks for tokens that match a broad list of known language names.
+ * Generic heuristic — no specific resume assumed.
+ */
+function extractLanguagesFromSkills(skillsText) {
+  // Common programming/scripting/query language names (generic list)
+  const LANG_NAMES = [
+    "python", "javascript", "typescript", "java", "kotlin", "swift", "c", "c++", "c#",
+    "go", "golang", "rust", "ruby", "php", "scala", "r", "matlab", "perl", "bash",
+    "shell", "sql", "nosql", "html", "css", "dart", "elixir", "haskell", "lua",
+    "groovy", "assembly", "cobol", "fortran", "vba", "powershell", "julia"
+  ];
+
+  const found = [];
+  const lower = skillsText.toLowerCase();
+
+  for (const lang of LANG_NAMES) {
+    // Match as a whole word
+    const re = new RegExp(`\\b${lang.replace("+", "\\+")}\\b`, "i");
+    if (re.test(lower)) {
+      // Use the original casing from the skills text where possible
+      const match = skillsText.match(re);
+      found.push(match ? match[0] : lang);
+    }
+  }
+
+  return found.join(", ");
+}
+
+/**
+ * Extract summary / profile text from the header or a summary section.
+ */
+function extractSummary(sections) {
+  const summarySection = sections.find(s =>
+    /^(?:summary|profile|objective|professional summary|career objective)/.test(s.heading)
+  );
+  if (summarySection && summarySection.lines.length) {
+    return summarySection.lines.slice(0, 5).join(" ");
+  }
+  return null;
+}
+
+/**
+ * Remove empty / whitespace-only fields from the profile object.
+ */
+function cleanProfile(profile) {
+  const clean = {};
+  for (const [k, v] of Object.entries(profile)) {
+    if (v && String(v).trim().length > 0) {
+      clean[k] = String(v).trim();
+    }
+  }
+  return clean;
+}
+
+/**
+ * Main entry point: parse a plain-text resume into a structured profile.
+ * Purely local, no network, no hardcoded sample values.
+ * Works generically for any resume layout after layout-aware PDF extraction.
+ */
 function parseResumeText(text) {
   const profile = {};
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) profile.email = emailMatch[0];
+  // ── Step 1: Contact fields (highest confidence — regex from full text) ──
+  Object.assign(profile, extractContactInfo(text));
 
-  const phoneMatch = text.match(/(\+?\d[\d\s\-().]{7,15}\d)/);
-  if (phoneMatch) profile.phone = phoneMatch[1].trim();
+  // ── Step 2: Split into sections ─────────────────────────────────────────
+  const sections = splitResumeSections(text);
+  const headerSection = sections.find(s => s.heading === "header");
+  const headerLines   = headerSection ? headerSection.lines : [];
 
-  const liMatch = text.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_%]+)/i);
-  if (liMatch) profile.linkedin = "https://linkedin.com/in/" + liMatch[1];
-
-  const ghMatch = text.match(/github\.com\/([a-zA-Z0-9\-_%]+)/i);
-  if (ghMatch) profile.github = "https://github.com/" + ghMatch[1];
-
-  for (const line of lines.slice(0, 6)) {
-    if (line.length > 2 && line.length < 55 &&
-      !line.includes("@") && !line.includes("http") &&
-      !line.match(/^\d/) && /[A-Z]/.test(line[0])) {
-      profile.full_name = line;
-      const parts = line.trim().split(/\s+/);
-      if (parts.length >= 2) {
-        profile.first_name = parts[0];
-        profile.last_name = parts[parts.length - 1];
-      }
-      break;
+  // ── Step 3: Name (from top of resume) ───────────────────────────────────
+  const allLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const name = extractName(allLines);
+  if (name) {
+    profile.full_name = name;
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      profile.first_name = parts[0];
+      profile.last_name  = parts[parts.length - 1];
     }
   }
 
-  const locMatch = text.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b/);
-  if (locMatch) profile.location = locMatch[0];
-
-  const yoeMatch = text.match(/(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/i);
-  if (yoeMatch) profile.years_experience = yoeMatch[1] + "+ years";
-
-  const skillsIdx = lines.findIndex(l => /^(skills|technical skills|core competencies)/i.test(l));
-  if (skillsIdx !== -1) {
-    const skillLines = [];
-    for (let i = skillsIdx + 1; i < skillsIdx + 8 && i < lines.length; i++) {
-      if (/^(experience|education|project|work|employment|summary|objective)/i.test(lines[i])) break;
-      skillLines.push(lines[i]);
-    }
-    if (skillLines.length) profile.skills = skillLines.join(", ");
+  // ── Step 4: Location (from header area) ─────────────────────────────────
+  // City, Country or City, State pattern — generic
+  if (!profile.location) {
+    const locText = headerLines.slice(0, 10).join(" ") + " " + allLines.slice(0, 10).join(" ");
+    const locM = locText.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s*([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)\b/);
+    if (locM) profile.location = locM[0];
   }
 
-  const eduIdx = lines.findIndex(l => /^(education|academic)/i.test(l));
-  if (eduIdx !== -1) {
-    for (let i = eduIdx + 1; i < eduIdx + 8 && i < lines.length; i++) {
-      const l = lines[i];
-      if (/bachelor|master|b\.tech|m\.tech|b\.e|m\.e|bsc|msc|phd|diploma/i.test(l) && !profile.degree) profile.degree = l;
-      if (/university|college|institute|iit|nit/i.test(l) && !profile.university) profile.university = l;
-      if (/\b(19|20)\d{2}\b/.test(l) && !profile.graduation_year) {
-        const y = l.match(/\b(19|20)\d{2}\b/g);
-        if (y) profile.graduation_year = y[y.length - 1];
-      }
-    }
+  // ── Step 5: Years of experience (from any section) ───────────────────────
+  const yoeM = text.match(/(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/i);
+  if (yoeM) profile.years_experience = yoeM[1] + "+ years";
+
+  // ── Step 6: Summary ──────────────────────────────────────────────────────
+  const summary = extractSummary(sections);
+  if (summary) profile.summary = summary;
+
+  // ── Step 7: Experience ───────────────────────────────────────────────────
+  const expSection = sections.find(s =>
+    /^(?:experience|work experience|professional experience|employment(?:\s+history)?|internship)/.test(s.heading)
+  );
+  if (expSection) {
+    Object.assign(profile, extractExperience(expSection.lines));
   }
 
-  const summIdx = lines.findIndex(l => /^(summary|profile|objective|about)/i.test(l));
-  if (summIdx !== -1) {
-    const summLines = [];
-    for (let i = summIdx + 1; i < summIdx + 6 && i < lines.length; i++) {
-      if (/^(experience|education|skills|project)/i.test(lines[i])) break;
-      summLines.push(lines[i]);
-    }
-    if (summLines.length) profile.summary = summLines.join(" ");
+  // ── Step 8: Education ────────────────────────────────────────────────────
+  const eduSection = sections.find(s =>
+    /^(?:education|academic background|academic qualifications?)/.test(s.heading)
+  );
+  if (eduSection) {
+    Object.assign(profile, extractEducation(eduSection.lines));
   }
 
-  const expIdx = lines.findIndex(l => /^(experience|work experience|employment)/i.test(l));
-  if (expIdx !== -1) {
-    for (let i = expIdx + 1; i < expIdx + 4 && i < lines.length; i++) {
-      const l = lines[i];
-      if (l.length > 3 && !l.match(/^\d/) && !profile.current_company) {
-        profile.current_company = l; break;
-      }
+  // ── Step 9: Skills ───────────────────────────────────────────────────────
+  const skillsSection = sections.find(s =>
+    /^(?:(?:technical\s+)?skills?|competencies|technologies|core competencies)/.test(s.heading)
+  );
+  if (skillsSection && skillsSection.lines.length) {
+    const skillsText = extractSkills(skillsSection.lines);
+    if (skillsText) {
+      profile.skills = skillsText;
+      const langs = extractLanguagesFromSkills(skillsText);
+      if (langs) profile.languages = langs;
     }
   }
 
-  return profile;
+  // ── Step 10: Achievements / Awards / Projects (compact summary) ──────────
+  const achieveSection = sections.find(s =>
+    /^(?:achievements?|awards?|honours?|honors?|certifications?)/.test(s.heading)
+  );
+  if (achieveSection && achieveSection.lines.length) {
+    profile.achievements = achieveSection.lines.slice(0, 5).join(" | ");
+  }
+
+  return cleanProfile(profile);
 }
+
+// ── Debug test harness (callable from browser console) ──────────────────────
+// Usage: copy resume text, then call window._fcvDebugParse(text) in DevTools.
+window._fcvDebugParse = function (text) {
+  const normalized = normalizeResumeText(text);
+  const sections   = splitResumeSections(normalized);
+  const profile    = parseResumeText(normalized);
+  console.group("FeelCV Debug Parse");
+  console.log("Sections found:", sections.map(s => `${s.heading} (${s.lines.length} lines)`));
+  console.log("Parsed profile:", profile);
+  console.log("Field count:", Object.keys(profile).length);
+  console.groupEnd();
+  return profile;
+};
 
 function buildPrompt(fieldKey, profile, jobTitle, company) {
   const { email, phone, ...safeProfile } = profile;
@@ -926,44 +1319,54 @@ async function init() {
         await setProfile(merged);
         await chrome.storage.local.set({ fcv_filename: file.name });
         await renderProfileView(merged);
-        status("Regex parsed. Checking AI connection…", "#FF8030");
+        status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FF8030");
 
-        // Phase 2: Asynchronous AI Extraction
+        // Phase 2: Asynchronous AI Enrichment (optional)
         try {
           const cfg = await getProviderConfig();
           const isOllama = cfg.provider === "ollama";
           const hasApiKey = cfg.provider === "openai_compat" && cfg.apiKey;
           
           if (isOllama || hasApiKey) {
-            status("Extracting profile with AI…");
+            status("Enriching profile with AI…");
             const parsedAI = await parseResumeWithAI(text);
-            
+
+            // ── Validate AI output against FIELD_REGISTRY ─────────────────
+            // Accept only known keys, non-empty string values, skip nulls/objects.
             const cleanedAI = {};
-            for (const key of Object.keys(parsedAI)) {
-              if (FIELD_REGISTRY[key] && parsedAI[key]) {
-                cleanedAI[key] = String(parsedAI[key]).trim();
+            if (parsedAI && typeof parsedAI === "object") {
+              for (const key of Object.keys(parsedAI)) {
+                if (!FIELD_REGISTRY[key]) continue; // unknown field — ignore
+                const val = parsedAI[key];
+                if (!val || typeof val !== "string" && typeof val !== "number") continue;
+                const strVal = String(val).trim();
+                if (strVal.length === 0 || strVal.toLowerCase() === "null" || strVal.toLowerCase() === "n/a") continue;
+                cleanedAI[key] = strVal;
               }
             }
 
+            // ── Merge: never overwrite reliable contact fields ────────────
             const currentProfile = await getProfile();
-            const contactKeys = ["email", "phone", "linkedin", "github", "portfolio"];
+            const PROTECTED_KEYS = new Set(["email", "phone", "linkedin", "github", "portfolio"]);
             const finalProfile = { ...currentProfile };
 
             for (const key of Object.keys(cleanedAI)) {
-              if (!contactKeys.includes(key) || !finalProfile[key]) {
+              // Only write AI value if the field is not protected, or if we
+              // don't already have a value for it.
+              if (!PROTECTED_KEYS.has(key) || !finalProfile[key]) {
                 finalProfile[key] = cleanedAI[key];
               }
             }
 
             await setProfile(finalProfile);
             await renderProfileView(finalProfile);
-            status("Profile fully extracted with AI!", "#FF8030");
+            status("Profile fully enriched with AI!", "#FF8030");
           } else {
-            status("Parsed basic fields. Setup AI for complete profile extraction.", "#FFCC00");
+            status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FFCC00");
           }
         } catch (aiErr) {
-          console.error("AI parsing failed:", aiErr);
-          status("AI parse skipped (Ollama offline or API issue). Basic profile saved.", "#FF8030");
+          console.error("AI enrichment failed:", aiErr);
+          status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FF8030");
         }
 
         fileInput.value = "";
