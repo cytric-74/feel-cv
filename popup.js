@@ -61,19 +61,18 @@ const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", 
 
 const getProfile = async () => window.FCV_profileStore.getFlat(await window.FCV_profileStore.load());
 
-// contact details pulled straight out of the resume by regex are trusted
-// more than the rest of a first-pass extraction; ai-derived values sit below
-// both, so an enrichment pass can only ever fill in what's missing rather
-// than second-guess something already found locally.
-const highTrustFieldKeys = new Set(["email", "phone", "linkedin", "github", "portfolio", "full_name", "first_name", "last_name", "location"]);
-
-function fieldsToRecords(flat, source) {
+// the parser tells us per-field how much to trust what it found (a regex
+// email match vs. a derived, multi-step field like "achievements" aren't
+// equally reliable) — that's what the resolver actually compares against, so
+// an ai pass can only out-rank a field the local parser was already unsure
+// about, never one it was confident in. ai confidence sits at a flat, modest
+// level: enough to fill a genuine gap, never enough to overrule a strong
+// local extraction on its own.
+function fieldsToRecords(flat, source, confidenceMap = {}) {
   const records = {};
   for (const [key, value] of Object.entries(flat)) {
     if (!value) continue;
-    let confidence = 0.6;
-    if (source === "resume" && highTrustFieldKeys.has(key)) confidence = 0.9;
-    if (source === "ai") confidence = 0.55;
+    const confidence = source === "ai" ? 0.55 : (confidenceMap[key] ?? 0.5);
     records[key] = { value, source, confidence };
   }
   return records;
@@ -115,6 +114,33 @@ async function extractTextFromFile(file) {
   else if (ext === "docx") raw = await extractDOCX(file);
   else throw new Error("Unsupported file type: " + ext);
   return normalizeResumeText(raw);
+}
+
+// a genuine two-column resume (sidebar + main content) has most of its rows
+// sitting entirely on one side of a consistent vertical gutter; an ordinary
+// single-column resume with the occasional right-aligned date doesn't — a
+// date shows up on a handful of rows, not most of them. this only reports a
+// split when the gap is wide, roughly centered, and recurs across a large
+// share of the page's rows, so it stays a no-op on the common single-column
+// case rather than risk slicing a page that was never in two columns.
+function detectColumnSplit(rows, pageWidth) {
+  if (!pageWidth || rows.length < 6) return null;
+
+  const lefts = [...new Set(rows.flatMap(r => r.items.map(it => it.x)))].sort((a, b) => a - b);
+  if (lefts.length < 2) return null;
+
+  let bestGap = 0, splitX = null;
+  for (let i = 1; i < lefts.length; i++) {
+    const gap = lefts[i] - lefts[i - 1];
+    if (gap > bestGap) { bestGap = gap; splitX = (lefts[i] + lefts[i - 1]) / 2; }
+  }
+  if (bestGap < 40 || splitX < pageWidth * 0.25 || splitX > pageWidth * 0.75) return null;
+
+  const rowsWithLeft = rows.filter(r => r.items.some(it => it.x < splitX)).length;
+  const rowsWithRight = rows.filter(r => r.items.some(it => it.x >= splitX)).length;
+  if (rowsWithLeft / rows.length < 0.35 || rowsWithRight / rows.length < 0.35) return null;
+
+  return splitX;
 }
 
 async function extractPDF(file) {
@@ -162,11 +188,29 @@ async function extractPDF(file) {
 
     // PDF Y grows upward, so sort descending to get top-to-bottom order.
     const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
+    const rows = sortedYs.map(y => ({ y, items: lineMap.get(y) }));
+    const pageWidth = page.view ? page.view[2] - page.view[0] : 0;
+    const splitX = detectColumnSplit(rows, pageWidth);
 
-    const lines = sortedYs.map(y => {
-      const items = lineMap.get(y).sort((a, b) => a.x - b.x);
-      return items.map(it => it.str).join(" ").trim();
-    }).filter(Boolean);
+    let lines;
+    if (splitX === null) {
+      lines = rows.map(row => {
+        const items = row.items.slice().sort((a, b) => a.x - b.x);
+        return items.map(it => it.str).join(" ").trim();
+      }).filter(Boolean);
+    } else {
+      // read the left column fully, top to bottom, then the right column —
+      // instead of merging both at each shared vertical position, which is
+      // what produces gibberish out of a sidebar + main-content layout.
+      const leftLines = [], rightLines = [];
+      for (const row of rows) {
+        const left = row.items.filter(it => it.x < splitX).sort((a, b) => a.x - b.x).map(it => it.str).join(" ").trim();
+        const right = row.items.filter(it => it.x >= splitX).sort((a, b) => a.x - b.x).map(it => it.str).join(" ").trim();
+        if (left) leftLines.push(left);
+        if (right) rightLines.push(right);
+      }
+      lines = [...leftLines, ...rightLines];
+    }
 
     pageTexts.push(lines.join("\n"));
   }
@@ -846,10 +890,11 @@ function switchTab(tabId) {
   if (tabId === "tab-settings") renderSettings();
 }
 
-// Sends the resume to the AI and returns its raw parsed JSON response.
-async function parseResumeWithAI(resumeText) {
+// sends an already-built extraction prompt to the ai and returns its parsed
+// json response. the prompt itself is built by the caller (FCV_buildSelectiveAIPrompt)
+// so only the fields the local parser was unsure about get asked for.
+async function sendAIParsePrompt(rawPrompt) {
   const cfg = await getProviderConfig();
-  const rawPrompt = FCV_buildAIPrompt(resumeText);
   const prompt = await requestCloudSend(rawPrompt, cfg);
 
   let responseText = "";
@@ -899,33 +944,42 @@ async function init() {
 
         const structured = FCV_buildStructuredProfile(text);
         const flat = FCV_deriveFlatProfile(structured);
+        const confidence = FCV_deriveFieldConfidence(structured);
 
-        const incoming = fieldsToRecords(flat, "resume");
+        const incoming = fieldsToRecords(flat, "resume", confidence);
         const { store, changes } = await window.FCV_profileStore.applyFields(incoming, { bumpResumeVersion: true });
         await chrome.storage.local.set({ fcv_filename: file.name, fcv_profile_structured: structured });
         await renderProfileView(window.FCV_profileStore.getFlat(store));
         status(summarizeChanges(changes, "resume") + " connect ai for deeper enrichment.", "#FF8030");
 
-        // Then enrich with AI in the background, if configured.
+        // ask the ai for only what the local parser was unsure about — if
+        // nothing came out weak, there's nothing to gain from a cloud call
+        // at all, so this skips it rather than re-parsing everything again.
         try {
           const cfg = await getProviderConfig();
           const isOllama = cfg.provider === "ollama";
           const hasApiKey = cfg.provider === "openai_compat" && cfg.apiKey;
 
           if (isOllama || hasApiKey) {
-            status("Enriching profile with AI…");
-            const parsedAI = await parseResumeWithAI(text);
+            const selectivePrompt = FCV_buildSelectiveAIPrompt(text, structured, confidence);
 
-            const structuredNow = (await storageGet("fcv_profile_structured")) || structured;
-            const mergedStructured = FCV_mergeAIIntoStructured(structuredNow, parsedAI);
-            const mergedFlat = FCV_deriveFlatProfile(mergedStructured);
+            if (!selectivePrompt) {
+              status("Resume parsed with high confidence — no ai enrichment needed.", "#FF8030");
+            } else {
+              status("Enriching profile with AI…");
+              const parsedAI = await sendAIParsePrompt(selectivePrompt);
 
-            const aiIncoming = fieldsToRecords(mergedFlat, "ai");
-            const { store: aiStore, changes: aiChanges } = await window.FCV_profileStore.applyFields(aiIncoming);
+              const structuredNow = (await storageGet("fcv_profile_structured")) || structured;
+              const mergedStructured = FCV_mergeAIIntoStructured(structuredNow, parsedAI);
+              const mergedFlat = FCV_deriveFlatProfile(mergedStructured);
 
-            await chrome.storage.local.set({ fcv_profile_structured: mergedStructured });
-            await renderProfileView(window.FCV_profileStore.getFlat(aiStore));
-            status(summarizeChanges(aiChanges, "ai enrichment"), "#FF8030");
+              const aiIncoming = fieldsToRecords(mergedFlat, "ai");
+              const { store: aiStore, changes: aiChanges } = await window.FCV_profileStore.applyFields(aiIncoming);
+
+              await chrome.storage.local.set({ fcv_profile_structured: mergedStructured });
+              await renderProfileView(window.FCV_profileStore.getFlat(aiStore));
+              status(summarizeChanges(aiChanges, "ai enrichment"), "#FF8030");
+            }
           } else {
             status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FFCC00");
           }

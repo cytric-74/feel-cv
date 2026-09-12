@@ -722,26 +722,116 @@ function deriveFlatProfile(structured) {
   return flat;
 }
 
-const STRUCTURED_SCHEMA_DESCRIPTION = `{
-  "full_name": "", "first_name": "", "last_name": "",
-  "location": "", "summary": "", "headline": "", "years_experience": "",
-  "experience": [{ "company": "", "role": "", "domain": "", "start_date": "", "end_date": "", "duration": "", "bullets": [""] }],
-  "projects": [{ "name": "", "stack": "", "description": "", "bullets": [""], "links": [""] }],
-  "skills": { "languages": [""], "frameworks": [""], "ml_ai": [""], "data": [""], "cloud_tools": [""], "other": [""] },
-  "education": [{ "institution": "", "degree": "", "major": "", "start_date": "", "end_date": "", "graduation_year": "", "gpa": "" }],
-  "certifications": [""],
-  "awards": [""]
-}`;
+// how much to trust each field this parser produced, based on how reliable
+// that particular extraction path tends to be — not on anything about this
+// specific resume. a regex-matched email is close to unambiguous; a derived,
+// multi-step field like "achievements" carries every upstream guess's error
+// along with it, so it starts near the bottom. this is what lets an ai pass
+// later fill in only the fields that actually need help, and what stops a
+// shaky local guess from out-ranking a better ai answer in the profile store.
+function deriveFieldConfidence(structured) {
+  const confidence = {
+    email: 0.95, linkedin: 0.95, github: 0.95,
+    phone: 0.75, portfolio: 0.6,
+    full_name: 0.8, first_name: 0.8, last_name: 0.8,
+    location: 0.55,
+  };
+  for (const k of Object.keys(confidence)) if (!structured[k]) delete confidence[k];
 
-// Built from section-marked text so the model sees the same boundaries the parser uses.
-function buildAIPrompt(normalizedText) {
+  if (structured.summary) confidence.summary = 0.85;
+
+  const exp = structured.experience || [];
+  if (exp.length) {
+    if (exp[0].company) confidence.current_company = 0.7;
+    if (exp[0].role) {
+      confidence.current_role = 0.7;
+      confidence.headline = 0.7;
+    } else if (structured.summary) {
+      confidence.headline = 0.4;
+    }
+    confidence.work_history = 0.55;
+  } else if (structured.summary) {
+    confidence.headline = 0.4;
+  }
+
+  const proj = structured.projects || [];
+  if (proj.length) confidence.projects = 0.55;
+
+  const skillGroups = structured.skills || {};
+  const anySkills = Object.values(skillGroups).some(a => (a || []).length);
+  if (anySkills) {
+    confidence.skills = 0.7;
+    if ((skillGroups.languages || []).length) confidence.languages = 0.7;
+  }
+
+  if ((structured.education || []).length) {
+    confidence.degree = 0.65;
+    confidence.university = 0.65;
+    confidence.major = 0.65;
+    confidence.graduation_year = 0.65;
+  }
+
+  if ((structured.certifications || []).length) confidence.certifications = 0.7;
+  if ((structured.awards || []).length) confidence.awards = 0.7;
+  if (confidence.certifications || confidence.awards || exp.length || proj.length) {
+    confidence.achievements = 0.5;
+  }
+
+  const years = [];
+  exp.forEach(e => {
+    const sy = parseYear(e.start_date);
+    const ey = parseYear(e.end_date);
+    if (sy) years.push(sy);
+    if (ey) years.push(ey);
+  });
+  if (years.length >= 2) confidence.years_experience = 0.75;
+  else if (structured.years_experience) confidence.years_experience = 0.65;
+
+  return confidence;
+}
+
+const SCALAR_AI_KEYS = ["full_name", "first_name", "last_name", "location", "summary", "headline", "years_experience", "email", "phone", "linkedin", "github", "portfolio"];
+const ARRAY_AI_SHAPES = {
+  experience: ["company", "role", "domain", "start_date", "end_date", "duration", "bullets"],
+  projects: ["name", "stack", "description", "bullets", "links"],
+  education: ["institution", "degree", "major", "start_date", "end_date", "graduation_year", "gpa"],
+  certifications: null,
+  awards: null,
+};
+
+function arrayFieldShapeLine(key, shape) {
+  if (!shape) return `"${key}": [""]`;
+  const fields = shape.map(f => `"${f}": ${(f === "bullets" || f === "links") ? '[""]' : '""'}`).join(", ");
+  return `"${key}": [{ ${fields} }]`;
+}
+
+// only asks the model for what the local parser is actually unsure about,
+// instead of re-running the whole schema over the whole resume every time —
+// cheaper, less to hallucinate about, and if nothing came out weak this
+// returns null so the caller can skip the ai call entirely.
+function buildSelectiveAIPrompt(normalizedText, structured, confidence, threshold = 0.65) {
+  const weakScalars = SCALAR_AI_KEYS.filter(k => !structured[k] || (confidence[k] || 0) < threshold);
+  const weakArrayKeys = Object.keys(ARRAY_AI_SHAPES).filter(k => {
+    const arr = structured[k];
+    return !arr || !arr.length || (confidence[k] || 0) < threshold;
+  });
+
+  if (!weakScalars.length && !weakArrayKeys.length) return null;
+
+  const schemaLines = [
+    ...weakScalars.map(k => `"${k}": ""`),
+    ...weakArrayKeys.map(k => arrayFieldShapeLine(k, ARRAY_AI_SHAPES[k])),
+  ];
+
   const sections = splitResumeSections(normalizedText);
   const sectioned = sections.map(s => `## ${s.heading}\n${s.lines.join("\n")}`).join("\n\n");
 
-  return `You are a professional resume parser. Extract structured details from the following resume text.
+  return `You are a professional resume parser. A local parser already extracted most of this resume; the fields below are the ones it could not extract with confidence. Extract ONLY these fields from the resume text below.
 Format the output STRICTLY as a JSON object matching this exact shape (omit fields you cannot find; use empty strings/arrays, never guess):
 
-${STRUCTURED_SCHEMA_DESCRIPTION}
+{
+  ${schemaLines.join(",\n  ")}
+}
 
 Do NOT wrap the JSON inside markdown code blocks and do not provide any explanation, preamble, or trailing text. Output ONLY the JSON.
 
@@ -846,7 +936,8 @@ function mergeAIIntoStructured(structured, aiRaw) {
 
 window.FCV_buildStructuredProfile = buildStructuredProfile;
 window.FCV_deriveFlatProfile = deriveFlatProfile;
-window.FCV_buildAIPrompt = buildAIPrompt;
+window.FCV_deriveFieldConfidence = deriveFieldConfidence;
+window.FCV_buildSelectiveAIPrompt = buildSelectiveAIPrompt;
 window.FCV_mergeAIIntoStructured = mergeAIIntoStructured;
 
 // DevTools: window._fcvDebugParse(pastedText) — no fixture text embedded here.
