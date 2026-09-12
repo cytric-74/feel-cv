@@ -200,8 +200,38 @@ function buildPrompt(fieldKey, profile, jobTitle, company, structured) {
   return prompts[fieldKey] || `Generate a short answer for the field "${fieldKey}" from this profile: ${p}. Output only the answer.`;
 }
 
+// turns an arbitrary url into the origin pattern chrome's permission apis
+// expect, e.g. "http://localhost:11434/api/tags" -> "http://localhost/*".
+function originPatternFromUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return null;
+    return `${u.protocol}//${u.hostname}/*`;
+  } catch {
+    return null;
+  }
+}
+
+// the manifest only pre-grants a handful of known hosts (localhost, the
+// built-in providers). anything else — a custom ollama address, someone's
+// own openai-compatible endpoint — gets asked for here, right before the
+// request that needs it, instead of the extension asking for the whole web
+// up front. in the dev preview shim there's no permissions api at all, so
+// this just gets out of the way.
+async function ensureHostAccess(url) {
+  if (!chrome.permissions) return true;
+  const pattern = originPatternFromUrl(url);
+  if (!pattern) return true;
+
+  const already = await new Promise(r => chrome.permissions.contains({ origins: [pattern] }, r));
+  if (already) return true;
+
+  return new Promise(r => chrome.permissions.request({ origins: [pattern] }, r));
+}
+
 async function callOllama(prompt, cfg) {
   const url = `${cfg.ollamaUrl.replace(/\/$/, "")}/api/generate`;
+  if (!(await ensureHostAccess(url))) throw new Error("Permission for this Ollama address was not granted.");
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -224,6 +254,7 @@ async function callOllama(prompt, cfg) {
 async function callOpenAICompat(prompt, cfg) {
   if (!cfg.apiKey) throw new Error("No API key set for fallback provider.");
   const url = `${cfg.fallbackUrl.replace(/\/$/, "")}/chat/completions`;
+  if (!(await ensureHostAccess(url))) throw new Error("Permission for this API endpoint was not granted.");
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -630,6 +661,11 @@ async function renderSettings() {
     const url = inputUrl.value.trim() || "http://localhost:11434";
     testResult.textContent = "Testing…";
     testResult.style.color = "#888888";
+    if (!(await ensureHostAccess(url))) {
+      testResult.textContent = "✗ Permission for this address was not granted.";
+      testResult.style.color = "#FF4444";
+      return;
+    }
     try {
       const res = await fetch(`${url.replace(/\/$/, "")}/api/tags`, { signal: AbortSignal.timeout(4000) });
       if (res.ok) {
@@ -685,6 +721,110 @@ async function renderSettings() {
     status("All data deleted.", "#FF4444");
     renderProfileView({});
   };
+}
+
+function siteScriptId(pattern) {
+  return "fcv-dynamic-" + pattern.replace(/[^a-z0-9]/gi, "_");
+}
+
+// a bare-bones match-pattern test — good enough for the simple "*://x/*"
+// shapes we generate and the ones declared in manifest.json, not meant as a
+// general implementation of chrome's full match-pattern spec.
+function matchesPattern(pattern, url) {
+  const re = new RegExp("^" + pattern.split("*").map(s => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$");
+  return re.test(url);
+}
+
+function isStaticallyInjected(url) {
+  const scripts = chrome.runtime.getManifest().content_scripts || [];
+  return scripts.some(cs => (cs.matches || []).some(pattern => matchesPattern(pattern, url)));
+}
+
+// known ats domains are already covered by the static content_scripts entry
+// in manifest.json — that grant is baked into the manifest and can't be
+// revoked at runtime, so this banner only ever offers enable/disable for
+// sites outside that list.
+async function refreshSiteAccessBanner() {
+  const banner = document.getElementById("site-access-banner");
+  const valueEl = document.getElementById("site-access-value");
+  const btn = document.getElementById("site-access-btn");
+  if (!banner || !valueEl || !btn) return;
+  if (!chrome.tabs || !chrome.permissions || !chrome.scripting) {
+    banner.classList.add("hidden");
+    return;
+  }
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const pattern = tab && originPatternFromUrl(tab.url);
+  if (!pattern) {
+    banner.classList.add("hidden");
+    return;
+  }
+  banner.classList.remove("hidden");
+
+  if (isStaticallyInjected(tab.url)) {
+    valueEl.textContent = "Always enabled (known job platform)";
+    btn.classList.add("hidden");
+    return;
+  }
+
+  btn.classList.remove("hidden");
+  const granted = await new Promise(r => chrome.permissions.contains({ origins: [pattern] }, r));
+
+  if (granted) {
+    valueEl.textContent = "Enabled for this site";
+    btn.textContent = "Disable";
+    btn.onclick = () => disableSiteAccess(pattern, tab.id);
+  } else {
+    valueEl.textContent = "Not enabled for this site";
+    btn.textContent = "Enable";
+    btn.onclick = () => enableSiteAccess(pattern, tab.id);
+  }
+}
+
+async function enableSiteAccess(pattern, tabId) {
+  const granted = await new Promise(r => chrome.permissions.request({ origins: [pattern] }, r));
+  if (!granted) {
+    status("Permission not granted.", "#FF4444");
+    return;
+  }
+
+  const id = siteScriptId(pattern);
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [id] });
+  } catch {
+    // wasn't registered before, nothing to remove
+  }
+  await chrome.scripting.registerContentScripts([{
+    id,
+    matches: [pattern],
+    js: ["field_registry.js", "content.js"],
+    css: ["overlay.css"],
+    runAt: "document_idle",
+    persistAcrossSessions: true,
+  }]);
+
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["field_registry.js", "content.js"] });
+    await chrome.scripting.insertCSS({ target: { tabId }, files: ["overlay.css"] });
+  } catch (err) {
+    console.warn("Registered for next visit, but couldn't activate on the already-open tab:", err);
+  }
+
+  status("Detection enabled for this site.", "#FF8030");
+  refreshSiteAccessBanner();
+}
+
+async function disableSiteAccess(pattern, tabId) {
+  const id = siteScriptId(pattern);
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [id] });
+  } catch {
+    // may only have been covered by the manifest's static list, not dynamic
+  }
+  await new Promise(r => chrome.permissions.remove({ origins: [pattern] }, r));
+  status("Detection disabled for this site.", "#FF8030");
+  refreshSiteAccessBanner();
 }
 
 function switchTab(tabId) {
@@ -746,6 +886,7 @@ async function init() {
 
   const profile = await getProfile();
   renderProfileView(profile);
+  refreshSiteAccessBanner();
 
   const fileInput = document.getElementById("resume-upload");
   if (fileInput) {

@@ -38,6 +38,10 @@
 
   // Job application page detector — needs both a job page and real form fields.
 
+  // mirrors the content_scripts matches list in manifest.json — that's what
+  // actually decides where this file gets injected automatically; this array
+  // only affects scoring once the script is already running somewhere. keep
+  // the two lists in sync by hand since a static manifest can't read this file.
   const ATS_URL_SIGNALS = [
     "greenhouse.io", "lever.co", "ashby.io", "ashbyhq.com",
     "workday.com", "bamboohr.com", "smartrecruiters.com", "jobvite.com",

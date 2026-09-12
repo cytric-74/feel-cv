@@ -11,10 +11,15 @@
   ],
 
   "host_permissions": [
-    "<all_urls>",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "https://api.openai.com/*",
     "https://openrouter.ai/*",
     "https://api.groq.com/*"
+  ],
+
+  "optional_host_permissions": [
+    "<all_urls>"
   ],
 
   "action": {
@@ -31,7 +36,25 @@
 
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://greenhouse.io/*", "*://*.greenhouse.io/*",
+        "*://lever.co/*", "*://*.lever.co/*",
+        "*://ashby.io/*", "*://*.ashby.io/*",
+        "*://ashbyhq.com/*", "*://*.ashbyhq.com/*",
+        "*://workday.com/*", "*://*.workday.com/*",
+        "*://bamboohr.com/*", "*://*.bamboohr.com/*",
+        "*://smartrecruiters.com/*", "*://*.smartrecruiters.com/*",
+        "*://jobvite.com/*", "*://*.jobvite.com/*",
+        "*://icims.com/*", "*://*.icims.com/*",
+        "*://taleo.net/*", "*://*.taleo.net/*",
+        "*://successfactors.com/*", "*://*.successfactors.com/*",
+        "*://recruitee.com/*", "*://*.recruitee.com/*",
+        "*://workable.com/*", "*://*.workable.com/*",
+        "*://breezy.hr/*", "*://*.breezy.hr/*",
+        "*://pinpoint.one/*", "*://*.pinpoint.one/*",
+        "*://dover.io/*", "*://*.dover.io/*",
+        "*://rippling.com/*", "*://*.rippling.com/*"
+      ],
       "js": ["field_registry.js", "content.js"],
       "css": ["overlay.css"],
       "run_at": "document_idle"
