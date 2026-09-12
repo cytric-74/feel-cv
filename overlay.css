@@ -4,6 +4,7 @@
   right: 24px;
   z-index: 2147483647;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   background: #1e1e1e;
@@ -65,4 +66,14 @@
 
 #fcv-banner .fcv-close:hover {
   color: #fff;
+}
+
+#fcv-banner .fcv-overwrite-row {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
 }

@@ -332,12 +332,37 @@
     return true;
   }
 
-  function doAutofill(profile) {
-    const fields = discoverFields();
-    let filled = 0, skipped = [];
+  // a field the site (or the user) already populated shouldn't get silently
+  // clobbered by whatever's in the profile — a select's own placeholder
+  // option often carries a non-empty value, so that alone doesn't count.
+  function isFieldFilled(el) {
+    if (el.tagName.toLowerCase() === "select") return el.selectedIndex > 0 && !!el.value;
+    return !!el.value && el.value.trim().length > 0;
+  }
 
-    for (const { element, key } of fields) {
-      if (SKIP_AUTOFILL.has(key)) { skipped.push(key); continue; }
+  // a dry run: figures out what *would* happen without touching the dom, so
+  // the banner can show the user a real count before anything gets written.
+  function planAutofill(profile) {
+    const fields = discoverFields();
+    const toFill = [], alreadyFilled = [], skippedByPolicy = [];
+
+    for (const entry of fields) {
+      const { element, key } = entry;
+      if (SKIP_AUTOFILL.has(key)) { skippedByPolicy.push(key); continue; }
+      if (!profile[key]) continue;
+      (isFieldFilled(element) ? alreadyFilled : toFill).push(entry);
+    }
+
+    return { fields, toFill, alreadyFilled, skippedByPolicy };
+  }
+
+  // empty fields are always included; already-filled ones only get touched
+  // when the user explicitly opted into overwriting them.
+  function applyAutofill(plan, profile, overwrite) {
+    const targets = overwrite ? [...plan.toFill, ...plan.alreadyFilled] : plan.toFill;
+    let filled = 0;
+
+    for (const { element, key } of targets) {
       const value = profile[key];
       if (value && fillElement(element, value)) {
         element.style.transition = "box-shadow 0.4s";
@@ -347,7 +372,7 @@
       }
     }
 
-    return { filled, skipped, total: fields.length };
+    return { filled, total: plan.fields.length };
   }
 
   // ── Learning from fields the user fills in manually ──────────────────────────
@@ -388,14 +413,86 @@
   }
 
   // ── Autofill prompt banner ────────────────────────────────────────────────────
+  // a click on "Autofill" doesn't fill anything by itself — it runs the dry
+  // run above and turns the button into a "Confirm (n)" that only then
+  // writes to the page. this is the one surface both the in-page banner and
+  // the popup's "Autofill Form" button route through, so neither one ever
+  // fires blind.
 
   let bannerShown = false;
+  let banner = null, textSpan = null, fillBtn = null, overwriteRow = null, overwriteBox = null;
+  let pendingPlan = null, pendingProfile = null;
 
-  function showAutofillBanner() {
-    if (bannerShown || document.getElementById("fcv-banner")) return;
+  function resetBannerState() {
+    banner = null; textSpan = null; fillBtn = null; overwriteRow = null; overwriteBox = null;
+    bannerShown = false; pendingPlan = null; pendingProfile = null;
+  }
+
+  function planSummaryText(plan) {
+    if (!plan.toFill.length && !plan.alreadyFilled.length) return "No matching fields found on this page.";
+    if (!plan.alreadyFilled.length) return `${plan.toFill.length} field${plan.toFill.length === 1 ? "" : "s"} ready to fill`;
+    return `${plan.toFill.length} empty field${plan.toFill.length === 1 ? "" : "s"} ready, ${plan.alreadyFilled.length} already filled`;
+  }
+
+  function presentPlan(profile) {
+    ensureBanner();
     bannerShown = true;
 
-    const banner = document.createElement("div");
+    if (!Object.keys(profile).length) {
+      textSpan.textContent = "No profile found. Upload your resume first.";
+      return;
+    }
+
+    pendingPlan = planAutofill(profile);
+    pendingProfile = profile;
+    textSpan.textContent = planSummaryText(pendingPlan);
+
+    if (!pendingPlan.toFill.length && !pendingPlan.alreadyFilled.length) {
+      pendingPlan = null;
+      return;
+    }
+
+    fillBtn.textContent = `Confirm (${pendingPlan.toFill.length})`;
+
+    if (pendingPlan.alreadyFilled.length && !overwriteRow) {
+      overwriteBox = document.createElement("input");
+      overwriteBox.type = "checkbox";
+      overwriteBox.id = "fcv-overwrite-box";
+
+      overwriteRow = document.createElement("label");
+      overwriteRow.className = "fcv-overwrite-row";
+      overwriteRow.htmlFor = "fcv-overwrite-box";
+      overwriteRow.appendChild(overwriteBox);
+      overwriteRow.appendChild(document.createTextNode(
+        ` also overwrite ${pendingPlan.alreadyFilled.length} already-filled field${pendingPlan.alreadyFilled.length === 1 ? "" : "s"}`
+      ));
+      banner.appendChild(overwriteRow);
+    }
+  }
+
+  function commitPlan() {
+    const overwrite = !!(overwriteBox && overwriteBox.checked);
+    const result = applyAutofill(pendingPlan, pendingProfile, overwrite);
+    watchForLearning(pendingPlan.fields);
+
+    textSpan.textContent = `Filled ${result.filled} of ${result.total} fields`;
+    fillBtn.textContent = "Autofill";
+    if (overwriteRow) { overwriteRow.remove(); overwriteRow = null; overwriteBox = null; }
+    pendingPlan = null;
+
+    chrome.runtime.sendMessage({ type: "AUTOFILL_DONE", filled: result.filled, total: result.total });
+    setTimeout(() => { if (banner) banner.remove(); resetBannerState(); }, 3000);
+  }
+
+  function onFillButtonClick() {
+    if (pendingPlan) { commitPlan(); return; }
+    getProfile().then(presentPlan);
+  }
+
+  function ensureBanner() {
+    if (banner) return banner;
+
+    banner = document.createElement("div");
     banner.id = "fcv-banner";
 
     const iconSpan = document.createElement("span");
@@ -403,12 +500,12 @@
     iconSpan.textContent = "✦";
     banner.appendChild(iconSpan);
 
-    const textSpan = document.createElement("span");
+    textSpan = document.createElement("span");
     textSpan.className = "fcv-text";
     textSpan.textContent = "FeelCV detected a job form";
     banner.appendChild(textSpan);
 
-    const fillBtn = document.createElement("button");
+    fillBtn = document.createElement("button");
     fillBtn.className = "fcv-btn";
     fillBtn.id = "fcv-fill-btn";
     fillBtn.textContent = "Autofill";
@@ -422,27 +519,21 @@
 
     document.body.appendChild(banner);
 
-    closeBtn.onclick = () => banner.remove();
-    fillBtn.onclick = async () => {
-      const profile = await getProfile();
-      if (!Object.keys(profile).length) {
-        textSpan.textContent = "No profile found. Upload your resume first.";
-        return;
-      }
-      const result = doAutofill(profile);
-      const fields = discoverFields();
-      watchForLearning(fields);
-      textSpan.textContent = `Filled ${result.filled} of ${result.total} fields`;
-      setTimeout(() => banner.remove(), 3000);
-    };
+    closeBtn.onclick = () => { banner.remove(); resetBannerState(); };
+    fillBtn.onclick = onFillButtonClick;
+
+    return banner;
+  }
+
+  function showAutofillBanner() {
+    if (bannerShown || document.getElementById("fcv-banner")) return;
+    bannerShown = true;
+    ensureBanner();
   }
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "DO_AUTOFILL") {
-      const result = doAutofill(message.profile);
-      const fields = discoverFields();
-      watchForLearning(fields);
-      chrome.runtime.sendMessage({ type: "AUTOFILL_DONE", ...result });
+      presentPlan(message.profile);
     }
     if (message.type === "RE_DETECT") {
       bannerShown = false;

@@ -1005,7 +1005,7 @@ async function init() {
         return;
       }
       chrome.runtime.sendMessage({ type: "TRIGGER_AUTOFILL", profile: profileData });
-      status("Autofilling…");
+      status("Check the page — review what's ready, then confirm.", "#FF8030");
     };
   }
 
