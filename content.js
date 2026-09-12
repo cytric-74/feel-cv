@@ -22,15 +22,25 @@
   // Never autofill these (user must generate them per-job)
   const SKIP_AUTOFILL  = new Set(["cover_letter", "motivation", "notice_period", "salary"]);
 
+  // a plain substring check lets a short pattern like "mail" or "cell" match
+  // inside an unrelated word ("voicemail", "cellular") — word boundaries fix
+  // that. a short, generic pattern is also only trusted when it turns up in a
+  // genuinely short, label-shaped string; buried in a long sentence it's just
+  // as likely to be incidental as it is to be the actual subject of the field.
+  function scorePatternMatch(norm, pattern) {
+    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`\\b${escaped}\\b`).test(norm)) return 0;
+    if (pattern.length <= 4 && norm.length > 40) return 0;
+    return pattern.length;
+  }
+
   function matchFieldKey(labelText) {
-    const norm = labelText.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim();
+    const norm = labelText.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
     let best = null, bestScore = 0;
     for (const [key, meta] of Object.entries(FIELD_REGISTRY)) {
       for (const pattern of meta.patterns) {
-        if (norm.includes(pattern)) {
-          const score = pattern.length; // longer pattern = more specific = preferred
-          if (score > bestScore) { bestScore = score; best = key; }
-        }
+        const score = scorePatternMatch(norm, pattern);
+        if (score > bestScore) { bestScore = score; best = key; }
       }
     }
     return best;
@@ -84,49 +94,70 @@
     return rect.width > 0 && rect.height > 0;
   }
 
-  // Tries every common way a field gets labeled and returns the longest match.
-  function getLabelText(el) {
-    const candidates = [];
+  // returns the first candidate found, checked in order of how reliable that
+  // source actually is — not the longest string among them. a real bound
+  // <label> is unambiguous; a placeholder is frequently an example value
+  // ("e.g. john@doe.com") rather than the label at all, so it's trusted last.
+  function firstUsable(...candidates) {
+    for (const c of candidates) {
+      const t = (c || "").trim();
+      if (t && t.length <= 120) return t;
+    }
+    return "";
+  }
 
+  function getLabelText(el) {
+    let boundLabelText = "";
     if (el.id) {
       const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-      if (lbl) candidates.push(lbl.innerText || lbl.textContent);
+      if (lbl) boundLabelText = lbl.innerText || lbl.textContent;
     }
-    const ariaLabel = el.getAttribute("aria-label");
-    if (ariaLabel) candidates.push(ariaLabel);
+
+    const wrappingLabel = el.closest("label");
+    const wrappingLabelText = wrappingLabel ? (wrappingLabel.innerText || wrappingLabel.textContent) : "";
+
+    let labelledByText = "";
     const labelledBy = el.getAttribute("aria-labelledby");
     if (labelledBy) {
-      const refText = labelledBy.split(/\s+/).map(id => {
+      labelledByText = labelledBy.split(/\s+/).map(id => {
         const ref = document.getElementById(id);
         return ref ? (ref.innerText || ref.textContent || "").trim() : "";
       }).filter(Boolean).join(" ");
-      if (refText) candidates.push(refText);
     }
-    if (el.placeholder) candidates.push(el.placeholder);
-    if (el.name) candidates.push(el.name.replace(/[_\-]/g, " "));
-    if (el.id)   candidates.push(el.id.replace(/[_\-]/g, " "));
-    const parentLabel = el.closest("label");
-    if (parentLabel) candidates.push(parentLabel.innerText || parentLabel.textContent);
+
+    const ariaLabel = el.getAttribute("aria-label") || "";
+
     // Common builder pattern: <div>Label</div><input> with no <label> element at all
+    let siblingText = "";
     const prev = el.previousElementSibling;
-    if (prev && !["INPUT","SELECT","TEXTAREA","BUTTON"].includes(prev.tagName)) {
-      const t = (prev.innerText || prev.textContent || "").trim();
-      if (t) candidates.push(t);
+    if (prev && !["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(prev.tagName)) {
+      siblingText = prev.innerText || prev.textContent || "";
     }
+
+    let wrapperText = "";
     const wrapper = el.closest('[class*="field"],[class*="form-group"],[class*="input-wrap"],[class*="form-item"],[class*="question"]');
     if (wrapper) {
       for (const child of wrapper.children) {
-        if (!["INPUT","SELECT","TEXTAREA","BUTTON"].includes(child.tagName)) {
+        if (!["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(child.tagName)) {
           const t = (child.innerText || child.textContent || "").trim();
-          if (t && t.length < 100) { candidates.push(t); break; }
+          if (t) { wrapperText = t; break; }
         }
       }
     }
 
-    return candidates
-      .map(c => (c || "").trim())
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length)[0] || "";
+    const placeholderText = el.placeholder || "";
+    const attrText = (el.name || el.id || "").replace(/[_\-]/g, " ");
+
+    return firstUsable(
+      boundLabelText,
+      wrappingLabelText,
+      labelledByText,
+      ariaLabel,
+      siblingText,
+      wrapperText,
+      placeholderText,
+      attrText
+    );
   }
 
   function scoreJobPage() {
@@ -197,9 +228,46 @@
 
   // ── Field discovery + autofill ───────────────────────────────────────────────
 
+  // once a field on this site has been matched, remember it by name/id so a
+  // future visit — same site, page reloaded, spa re-rendered the form — can
+  // skip re-running the heuristic entirely instead of re-guessing from
+  // scratch every time. keyed by hostname, capped so it can't grow forever.
+  const SITE_CACHE_KEY = "fcv_site_field_cache";
+  const SITE_CACHE_MAX_HOSTS = 200;
+
+  let siteFieldCache = {};
+  chrome.storage.local.get(SITE_CACHE_KEY, (d) => { siteFieldCache = d[SITE_CACHE_KEY] || {}; });
+
+  function elementCacheKey(el) {
+    if (el.name) return "name:" + el.name;
+    if (el.id) return "id:" + el.id;
+    return null;
+  }
+
+  // the cached mapping is only trusted while the label text that produced it
+  // hasn't changed — if the page's markup drifts, this falls back to a fresh
+  // heuristic match on its own rather than keep serving a stale answer.
+  function rememberFieldMapping(cacheKey, key, labelSnapshot) {
+    if (!cacheKey) return;
+    const host = location.hostname;
+    const entry = siteFieldCache[host] || { updatedAt: 0, fields: {} };
+    entry.fields[cacheKey] = { key, labelSnapshot };
+    entry.updatedAt = Date.now();
+    siteFieldCache[host] = entry;
+
+    const hosts = Object.keys(siteFieldCache);
+    if (hosts.length > SITE_CACHE_MAX_HOSTS) {
+      const oldest = hosts.sort((a, b) => (siteFieldCache[a].updatedAt || 0) - (siteFieldCache[b].updatedAt || 0))[0];
+      delete siteFieldCache[oldest];
+    }
+    chrome.storage.local.set({ [SITE_CACHE_KEY]: siteFieldCache });
+  }
+
   function discoverFields() {
     const results = [];
     const seen = new WeakSet();
+    const hostEntry = siteFieldCache[location.hostname];
+    const cachedFields = hostEntry ? hostEntry.fields : null;
 
     const inputs = document.querySelectorAll(FILLABLE_SELECTOR);
 
@@ -208,12 +276,21 @@
       if (!isVisible(el)) continue;
       seen.add(el);
 
+      const cacheKey = elementCacheKey(el);
+      const cached = cachedFields && cacheKey ? cachedFields[cacheKey] : null;
+
       const labelText = getLabelText(el);
       if (!labelText) continue;
+
+      if (cached && cached.labelSnapshot === labelText) {
+        results.push({ element: el, key: cached.key, labelText });
+        continue;
+      }
 
       const key = matchFieldKey(labelText);
       if (key) {
         results.push({ element: el, key, labelText });
+        rememberFieldMapping(cacheKey, key, labelText);
       }
     }
 
