@@ -59,9 +59,33 @@ const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
 
 const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", "achievements", "summary"]);
 
-const getProfile = () => storageGet("fcv_profile").then(p => p || {});
-const setProfile = (p) => new Promise(r => chrome.storage.local.set({ fcv_profile: p }, r));
-const updateProfile = async (patch) => { const cur = await getProfile(); await setProfile({ ...cur, ...patch }); };
+const getProfile = async () => window.FCV_profileStore.getFlat(await window.FCV_profileStore.load());
+
+// contact details pulled straight out of the resume by regex are trusted
+// more than the rest of a first-pass extraction; ai-derived values sit below
+// both, so an enrichment pass can only ever fill in what's missing rather
+// than second-guess something already found locally.
+const highTrustFieldKeys = new Set(["email", "phone", "linkedin", "github", "portfolio", "full_name", "first_name", "last_name", "location"]);
+
+function fieldsToRecords(flat, source) {
+  const records = {};
+  for (const [key, value] of Object.entries(flat)) {
+    if (!value) continue;
+    let confidence = 0.6;
+    if (source === "resume" && highTrustFieldKeys.has(key)) confidence = 0.9;
+    if (source === "ai") confidence = 0.55;
+    records[key] = { value, source, confidence };
+  }
+  return records;
+}
+
+function summarizeChanges(changes, label) {
+  const applied = changes.filter(c => c.applied).length;
+  const kept = changes.length - applied;
+  if (!changes.length) return `${label}: no new data found.`;
+  if (!kept) return `${label}: ${applied} field${applied === 1 ? "" : "s"} updated.`;
+  return `${label}: ${applied} field${applied === 1 ? "" : "s"} updated, ${kept} kept from before.`;
+}
 
 const DEFAULT_CONFIG = {
   provider: "ollama",
@@ -70,6 +94,7 @@ const DEFAULT_CONFIG = {
   ollamaModel: "llama3.2",
   fallbackUrl: "https://api.groq.com/openai/v1",
   fallbackModel: "llama-3.1-8b-instant",
+  skipCloudPreview: false,
 };
 
 const getProviderConfig = () => new Promise(r =>
@@ -157,13 +182,11 @@ async function extractDOCX(file) {
 }
 
 // Structured parsing and AI prompt/merge logic live in resume_parser.js.
+// contact details aren't stripped here anymore — every prompt built by this
+// function passes through the privacy gateway before it can reach a cloud
+// provider, so redaction happens in exactly one place instead of twice.
 function buildPrompt(fieldKey, profile, jobTitle, company, structured) {
-  const { email, phone, ...safeProfile } = profile;
-  let context = safeProfile;
-  if (structured && Object.keys(structured).length) {
-    const { email: _e, phone: _p, ...safeStructured } = structured;
-    context = safeStructured;
-  }
+  const context = (structured && Object.keys(structured).length) ? structured : profile;
   const p = JSON.stringify(context);
   const role = jobTitle || "this role";
   const co = company || "this company";
@@ -222,10 +245,55 @@ async function callOpenAICompat(prompt, cfg) {
   return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
+// shows the redacted payload and waits for the user to send or cancel.
+// resolves to { send, skipNextTime } — never rejects.
+function showCloudPreviewModal(text) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("privacy-modal-overlay");
+    const textArea = document.getElementById("privacy-modal-text");
+    const skipBox = document.getElementById("privacy-modal-skip");
+    const sendBtn = document.getElementById("privacy-modal-send");
+    const cancelBtn = document.getElementById("privacy-modal-cancel");
+    const closeBtn = document.getElementById("privacy-modal-close");
+
+    textArea.value = text;
+    skipBox.checked = false;
+    overlay.classList.remove("hidden");
+
+    const finish = (result) => {
+      overlay.classList.add("hidden");
+      sendBtn.onclick = null;
+      cancelBtn.onclick = null;
+      closeBtn.onclick = null;
+      resolve(result);
+    };
+
+    sendBtn.onclick = () => finish({ send: true, skipNextTime: skipBox.checked });
+    cancelBtn.onclick = () => finish({ send: false, skipNextTime: false });
+    closeBtn.onclick = () => finish({ send: false, skipNextTime: false });
+  });
+}
+
+// the only path any prompt can take to a cloud provider. a local (ollama)
+// call passes straight through untouched — nothing about it ever leaves the
+// device, so there's nothing to redact or ask permission for.
+async function requestCloudSend(promptText, cfg) {
+  if (!window.FCV_privacyGateway.isCloudProvider(cfg)) return promptText;
+
+  const { text: redacted } = window.FCV_privacyGateway.redact(promptText);
+  if (cfg.skipCloudPreview) return redacted;
+
+  const { send, skipNextTime } = await showCloudPreviewModal(redacted);
+  if (!send) throw new Error("Cancelled before sending to the external API.");
+  if (skipNextTime) await setProviderConfig({ ...cfg, skipCloudPreview: true });
+  return redacted;
+}
+
 async function generateWithAI(fieldKey, profile, jobTitle = "", company = "") {
   const cfg = await getProviderConfig();
   const structured = await storageGet("fcv_profile_structured");
-  const prompt = buildPrompt(fieldKey, profile, jobTitle, company, structured);
+  const rawPrompt = buildPrompt(fieldKey, profile, jobTitle, company, structured);
+  const prompt = await requestCloudSend(rawPrompt, cfg);
 
   if (cfg.provider === "ollama") {
     try {
@@ -414,7 +482,7 @@ function showLearnBanner(key, value, fieldLabel) {
     el("div", { className: "learn-val", textContent: value.slice(0, 80) + (value.length > 80 ? "…" : "") }),
     el("div", { className: "learn-btns" }, [
       el("button", { className: "btn-yes", textContent: "Save", onclick: async () => {
-        await updateProfile({ [key]: value });
+        await window.FCV_profileStore.applyFields({ [key]: { value, source: "learned", confidence: 0.75 } });
         banner.remove();
         status("Learned: " + (FIELD_REGISTRY[key]?.label || key), "#FF8030");
         renderProfileView(await getProfile());
@@ -581,13 +649,20 @@ async function renderSettings() {
 
   saveBtn.onclick = async () => {
     const activeProv = btnOllama.classList.contains("active") ? "ollama" : "openai_compat";
+    const fallbackUrl = inputFallbackUrl.value.trim() || DEFAULT_CONFIG.fallbackUrl;
+    const apiKey = inputApiKey.value.trim() || "";
+    // pointing at a different endpoint or key means the earlier "don't ask
+    // again" no longer covers where the data is actually going.
+    const endpointChanged = fallbackUrl !== cfg.fallbackUrl || apiKey !== cfg.apiKey;
     const newCfg = {
+      ...cfg,
       provider: activeProv,
       ollamaUrl: inputUrl.value.trim() || DEFAULT_CONFIG.ollamaUrl,
       ollamaModel: inputModel.value.trim() || DEFAULT_CONFIG.ollamaModel,
-      fallbackUrl: inputFallbackUrl.value.trim() || DEFAULT_CONFIG.fallbackUrl,
+      fallbackUrl,
       fallbackModel: inputFallbackModel.value.trim() || DEFAULT_CONFIG.fallbackModel,
-      apiKey: inputApiKey.value.trim() || "",
+      apiKey,
+      skipCloudPreview: endpointChanged ? false : cfg.skipCloudPreview,
     };
     await setProviderConfig(newCfg);
     status("Settings saved.", "#FF8030");
@@ -634,7 +709,8 @@ function switchTab(tabId) {
 // Sends the resume to the AI and returns its raw parsed JSON response.
 async function parseResumeWithAI(resumeText) {
   const cfg = await getProviderConfig();
-  const prompt = FCV_buildAIPrompt(resumeText);
+  const rawPrompt = FCV_buildAIPrompt(resumeText);
+  const prompt = await requestCloudSend(rawPrompt, cfg);
 
   let responseText = "";
   if (cfg.provider === "ollama") {
@@ -680,17 +756,14 @@ async function init() {
       try {
         const text = await extractTextFromFile(file);
 
-        // Instant local parse first, no AI required.
         const structured = FCV_buildStructuredProfile(text);
-        let flat = FCV_deriveFlatProfile(structured);
+        const flat = FCV_deriveFlatProfile(structured);
 
-        // Save right away so the UI updates fast, keeping existing values.
-        const current = await getProfile();
-        flat = { ...flat, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) };
-        await setProfile(flat);
+        const incoming = fieldsToRecords(flat, "resume");
+        const { store, changes } = await window.FCV_profileStore.applyFields(incoming, { bumpResumeVersion: true });
         await chrome.storage.local.set({ fcv_filename: file.name, fcv_profile_structured: structured });
-        await renderProfileView(flat);
-        status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FF8030");
+        await renderProfileView(window.FCV_profileStore.getFlat(store));
+        status(summarizeChanges(changes, "resume") + " connect ai for deeper enrichment.", "#FF8030");
 
         // Then enrich with AI in the background, if configured.
         try {
@@ -706,20 +779,12 @@ async function init() {
             const mergedStructured = FCV_mergeAIIntoStructured(structuredNow, parsedAI);
             const mergedFlat = FCV_deriveFlatProfile(mergedStructured);
 
-            // Never overwrite already-trusted contact fields with AI values.
-            const currentProfile = await getProfile();
-            const PROTECTED_KEYS = new Set(["email", "phone", "linkedin", "github", "portfolio"]);
-            const finalProfile = { ...currentProfile };
-            for (const key of Object.keys(mergedFlat)) {
-              if (!PROTECTED_KEYS.has(key) || !finalProfile[key]) {
-                finalProfile[key] = mergedFlat[key];
-              }
-            }
+            const aiIncoming = fieldsToRecords(mergedFlat, "ai");
+            const { store: aiStore, changes: aiChanges } = await window.FCV_profileStore.applyFields(aiIncoming);
 
-            await setProfile(finalProfile);
             await chrome.storage.local.set({ fcv_profile_structured: mergedStructured });
-            await renderProfileView(finalProfile);
-            status("Profile fully enriched with AI!", "#FF8030");
+            await renderProfileView(window.FCV_profileStore.getFlat(aiStore));
+            status(summarizeChanges(aiChanges, "ai enrichment"), "#FF8030");
           } else {
             status("Basic profile extracted locally. Connect AI for deeper enrichment.", "#FFCC00");
           }
@@ -753,7 +818,7 @@ async function init() {
   if (deleteBtn) {
     deleteBtn.onclick = async () => {
       if (!confirm("Delete your profile?")) return;
-      await chrome.storage.local.remove(["fcv_profile", "fcv_filename", "fcv_profile_structured"]);
+      await window.FCV_profileStore.clearProfile();
       renderProfileView({});
       status("Profile deleted.", "#FF4444");
     };
@@ -768,7 +833,8 @@ async function init() {
       const key = document.getElementById("modal-key")?.value;
       const val = document.getElementById("modal-input")?.value.trim() || "";
       if (!key) return;
-      await updateProfile({ [key]: val });
+      if (val) await window.FCV_profileStore.setManualField(key, val);
+      else await window.FCV_profileStore.deleteField(key);
       closeModal();
       renderProfileView(await getProfile());
       status("Updated.", "#FF8030");

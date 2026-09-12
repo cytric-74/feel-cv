@@ -822,6 +822,16 @@ body {
   color: #FFFFFF;
 }
 
+.privacy-consent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #A0A0A0;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;

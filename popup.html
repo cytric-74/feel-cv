@@ -177,11 +177,37 @@
     </div>
   </div>
 
+  <div id="privacy-modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">review before sending</span>
+        <button id="privacy-modal-close" class="btn-icon" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <p class="modal-desc">this is the exact text about to be sent to your external api provider. contact details are stripped automatically before it leaves your device.</p>
+      <textarea id="privacy-modal-text" class="input modal-textarea" rows="8" readonly></textarea>
+      <label class="privacy-consent-row">
+        <input type="checkbox" id="privacy-modal-skip">
+        don't ask again for this provider
+      </label>
+      <div class="modal-actions">
+        <button id="privacy-modal-cancel" class="btn-pill-outline" style="flex:1">Cancel</button>
+        <button id="privacy-modal-send" class="btn-pill-fill" style="flex:1">Send</button>
+      </div>
+    </div>
+  </div>
+
   <script src="pdf.min.js"></script>
   <script src="pdf.worker.min.js"></script>
   <script src="mammoth.browser.min.js"></script>
   <script src="field_registry.js"></script>
   <script src="resume_parser.js"></script>
+  <script src="profile_store.js"></script>
+  <script src="privacy_gateway.js"></script>
   <script src="popup.js"></script>
 </body>
 
