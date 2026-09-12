@@ -87,7 +87,9 @@ function extractContactInfo(text) {
   const emailM = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   if (emailM) info.email = emailM[0];
 
-  const phoneM = text.match(/(\+?[\d][\d\s\-().]{6,18}[\d])/);
+  // the leading char can be an opening paren ("(555) ...") as well as a
+  // digit or "+" — without it the paren gets left out of the match entirely.
+  const phoneM = text.match(/(\+?[\d(][\d\s\-().]{6,18}[\d])/);
   if (phoneM) {
     const digits = phoneM[1].replace(/\D/g, "");
     if (digits.length >= 7 && digits.length <= 15) info.phone = phoneM[1].trim();

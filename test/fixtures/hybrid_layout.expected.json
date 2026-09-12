@@ -1,0 +1,98 @@
+{
+  "structured": {
+    "full_name": "Priya Nair",
+    "first_name": "Priya",
+    "last_name": "Nair",
+    "email": "priya.nair@example.com",
+    "phone": "555) 222-3344",
+    "location": "Seattle, WA",
+    "linkedin": "",
+    "github": "",
+    "portfolio": "",
+    "summary": "",
+    "headline": "",
+    "years_experience": "",
+    "experience": [
+      {
+        "company": "Brightline Media",
+        "role": "Product Marketing Manager",
+        "domain": "",
+        "start_date": "Jan 2020",
+        "end_date": "Aug 2023",
+        "duration": "3 yrs 7 mos",
+        "bullets": [
+          "Launched three product lines generating $4M in year-one revenue.",
+          "Built and managed a team of five marketing specialists."
+        ]
+      }
+    ],
+    "projects": [],
+    "skills": {
+      "languages": [],
+      "frameworks": [],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [
+        "HubSpot",
+        "Salesforce",
+        "Google Analytics"
+      ],
+      "other": []
+    },
+    "education": [
+      {
+        "institution": "Seattle Pacific University",
+        "degree": "Bachelor of Arts in Marketing",
+        "major": "",
+        "start_date": "2015",
+        "end_date": "2019",
+        "graduation_year": "2019",
+        "gpa": ""
+      }
+    ],
+    "certifications": [],
+    "awards": [
+      "Marketing Team of the Year 2022"
+    ],
+    "achievements": []
+  },
+  "flat": {
+    "full_name": "Priya Nair",
+    "first_name": "Priya",
+    "last_name": "Nair",
+    "email": "priya.nair@example.com",
+    "phone": "555) 222-3344",
+    "location": "Seattle, WA",
+    "current_company": "Brightline Media",
+    "current_role": "Product Marketing Manager",
+    "work_history": "Product Marketing Manager · Brightline Media — Jan 2020 – Aug 2023 — Launched three product lines generating $4M in year-one revenue.; Built and managed a team of five marketing specialists.",
+    "skills": "HubSpot, Salesforce, Google Analytics",
+    "degree": "Bachelor of Arts in Marketing",
+    "university": "Seattle Pacific University",
+    "graduation_year": "2019",
+    "awards": "Marketing Team of the Year 2022",
+    "achievements": "Marketing Team of the Year 2022 | Launched three product lines generating $4M in year-one revenue.",
+    "headline": "Product Marketing Manager",
+    "years_experience": "3+ years"
+  },
+  "confidence": {
+    "email": 0.95,
+    "phone": 0.75,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "current_company": 0.7,
+    "current_role": 0.7,
+    "headline": 0.7,
+    "work_history": 0.55,
+    "skills": 0.7,
+    "degree": 0.65,
+    "university": 0.65,
+    "major": 0.65,
+    "graduation_year": 0.65,
+    "awards": 0.7,
+    "achievements": 0.5,
+    "years_experience": 0.75
+  }
+}

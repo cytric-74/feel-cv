@@ -61,18 +61,6 @@
     }
   ],
 
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "pdf.min.js",
-        "pdf.worker.min.js",
-        "mammoth.browser.min.js",
-        "icons/*.svg"
-      ],
-      "matches": ["<all_urls>"]
-    }
-  ],
-
   "icons": {
     "16": "icon.png",
     "48": "icon48.png"

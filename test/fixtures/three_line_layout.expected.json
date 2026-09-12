@@ -1,0 +1,106 @@
+{
+  "structured": {
+    "full_name": "Jane Carter",
+    "first_name": "Jane",
+    "last_name": "Carter",
+    "email": "jane.carter@example.com",
+    "phone": "555) 123-4567",
+    "location": "Austin, TX",
+    "linkedin": "",
+    "github": "",
+    "portfolio": "",
+    "summary": "Product-minded software engineer with 5 years of experience building web applications.",
+    "headline": "",
+    "years_experience": "5+ years",
+    "experience": [
+      {
+        "company": "Skyline Software Inc.",
+        "role": "Software Engineer",
+        "domain": "",
+        "start_date": "Jan 2021",
+        "end_date": "Present",
+        "duration": "5 yrs 8 mos",
+        "bullets": [
+          "Led migration of the billing service, cutting latency by 30%.",
+          "Mentored two junior engineers."
+        ]
+      }
+    ],
+    "projects": [],
+    "skills": {
+      "languages": [
+        "Python",
+        "JavaScript",
+        "SQL"
+      ],
+      "frameworks": [
+        "React",
+        "Django"
+      ],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [],
+      "other": []
+    },
+    "education": [
+      {
+        "institution": "University of Texas",
+        "degree": "Bachelor of Science in Computer Science",
+        "major": "Bachelor of Science in Computer Science",
+        "start_date": "2016",
+        "end_date": "2020",
+        "graduation_year": "2020",
+        "gpa": ""
+      }
+    ],
+    "certifications": [
+      "AWS Certified Solutions Architect"
+    ],
+    "awards": [],
+    "achievements": []
+  },
+  "flat": {
+    "full_name": "Jane Carter",
+    "first_name": "Jane",
+    "last_name": "Carter",
+    "email": "jane.carter@example.com",
+    "phone": "555) 123-4567",
+    "location": "Austin, TX",
+    "summary": "Product-minded software engineer with 5 years of experience building web applications.",
+    "current_company": "Skyline Software Inc.",
+    "current_role": "Software Engineer",
+    "work_history": "Software Engineer · Skyline Software Inc. — Jan 2021 – Present — Led migration of the billing service, cutting latency by 30%.; Mentored two junior engineers.",
+    "skills": "Python, JavaScript, SQL, React, Django",
+    "languages": "Python, JavaScript, SQL",
+    "degree": "Bachelor of Science in Computer Science",
+    "university": "University of Texas",
+    "major": "Bachelor of Science in Computer Science",
+    "graduation_year": "2020",
+    "certifications": "AWS Certified Solutions Architect",
+    "achievements": "AWS Certified Solutions Architect | Led migration of the billing service, cutting latency by 30%.",
+    "headline": "Software Engineer",
+    "years_experience": "5+ years"
+  },
+  "confidence": {
+    "email": 0.95,
+    "phone": 0.75,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "summary": 0.85,
+    "current_company": 0.7,
+    "current_role": 0.7,
+    "headline": 0.7,
+    "work_history": 0.55,
+    "skills": 0.7,
+    "languages": 0.7,
+    "degree": 0.65,
+    "university": 0.65,
+    "major": 0.65,
+    "graduation_year": 0.65,
+    "certifications": 0.7,
+    "achievements": 0.5,
+    "years_experience": 0.75
+  }
+}

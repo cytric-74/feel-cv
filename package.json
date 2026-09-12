@@ -1,0 +1,11 @@
+{
+  "name": "feelcv",
+  "version": "3.0.0",
+  "private": true,
+  "description": "AI-powered resume autofill assistant for job applications — browser extension, no build step.",
+  "scripts": {
+    "test": "node test/run_fixtures.js",
+    "test:update": "node test/run_fixtures.js --update",
+    "fetch-libs": "node download_libs.js"
+  }
+}

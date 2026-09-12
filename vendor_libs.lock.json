@@ -1,0 +1,20 @@
+{
+  "_comment": "records exactly which vendored build of each third-party file this extension ships. download_libs.js/.ps1 verify against this after fetching, and it's what tells you later whether a file on disk still matches what was actually reviewed and shipped.",
+  "libs": {
+    "pdf.min.js": {
+      "version": "3.11.174",
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+      "sha256": "5b5799e6f8c680663207ac5b42ee14eed2a406fa7af48f50c154f0c0b1566946"
+    },
+    "pdf.worker.min.js": {
+      "version": "3.11.174",
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
+      "sha256": "feabdf309770ed24bba31a5467836cdc8cf639c705af27d52b585b041bb8527b"
+    },
+    "mammoth.browser.min.js": {
+      "version": "1.6.0",
+      "url": "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js",
+      "sha256": "596ef52239e52d8ee3cee10b2ee4a72596abf900d0e4f468593f956e9f1809b0"
+    }
+  }
+}

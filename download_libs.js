@@ -1,12 +1,13 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
-const libs = {
-  "pdf.min.js": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
-  "pdf.worker.min.js": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
-  "mammoth.browser.min.js": "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"
-};
+const lock = JSON.parse(fs.readFileSync(path.join(__dirname, 'vendor_libs.lock.json'), 'utf8')).libs;
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
@@ -36,17 +37,35 @@ async function main() {
   console.log("===================================================");
   console.log("FeelCV Node Library Downloader");
   console.log("===================================================");
-  for (const [name, url] of Object.entries(libs)) {
-    process.stdout.write(`Downloading ${name}... `);
+
+  let anyMismatch = false;
+
+  for (const [name, entry] of Object.entries(lock)) {
+    const dest = path.join(__dirname, name);
+    process.stdout.write(`Downloading ${name} (${entry.version})... `);
     try {
-      await download(url, path.join(__dirname, name));
-      console.log(`[ SUCCESS ]`);
+      await download(entry.url, dest);
+      const actualHash = sha256(dest);
+      if (actualHash !== entry.sha256) {
+        anyMismatch = true;
+        console.log(`[ DOWNLOADED, BUT HASH MISMATCH — expected ${entry.sha256}, got ${actualHash} ]`);
+      } else {
+        console.log(`[ SUCCESS, verified against vendor_libs.lock.json ]`);
+      }
     } catch (err) {
       console.log(`[ FAILED: ${err.message} ]`);
     }
   }
+
   console.log("===================================================");
-  console.log("Done!");
+  if (anyMismatch) {
+    console.log("One or more files didn't match vendor_libs.lock.json — the cdn build may have");
+    console.log("changed, or something tampered with it in transit. don't ship these as-is; update");
+    console.log("vendor_libs.lock.json deliberately once you've confirmed what changed and why.");
+    process.exitCode = 1;
+  } else {
+    console.log("Done!");
+  }
 }
 
 main();

@@ -1,0 +1,24 @@
+Jane Carter
+jane.carter@example.com | (555) 123-4567 | Austin, TX
+
+Summary
+Product-minded software engineer with 5 years of experience building web applications.
+
+Experience
+Software Engineer
+Skyline Software Inc.
+Jan 2021 - Present
+- Led migration of the billing service, cutting latency by 30%.
+- Mentored two junior engineers.
+
+Education
+Bachelor of Science in Computer Science
+University of Texas
+2016 - 2020
+
+Skills
+Languages: Python, JavaScript, SQL
+Frameworks: React, Django
+
+Certifications
+AWS Certified Solutions Architect

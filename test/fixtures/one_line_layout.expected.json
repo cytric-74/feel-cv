@@ -1,0 +1,93 @@
+{
+  "structured": {
+    "full_name": "Marcus Lee",
+    "first_name": "Marcus",
+    "last_name": "Lee",
+    "email": "marcus.lee@example.com",
+    "phone": "555) 987-6543",
+    "location": "Denver, CO",
+    "linkedin": "",
+    "github": "",
+    "portfolio": "",
+    "summary": "",
+    "headline": "",
+    "years_experience": "",
+    "experience": [
+      {
+        "company": "Northwind Analytics",
+        "role": "Senior Data Engineer",
+        "domain": "Data Platform",
+        "start_date": "Mar 2019",
+        "end_date": "Jun 2022",
+        "duration": "3 yrs 3 mos",
+        "bullets": [
+          "Built streaming ingestion pipeline processing 2M events/day.",
+          "Reduced pipeline cost by 40% through partition tuning."
+        ]
+      }
+    ],
+    "projects": [],
+    "skills": {
+      "languages": [],
+      "frameworks": [],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [],
+      "other": []
+    },
+    "education": [
+      {
+        "institution": "Colorado State University",
+        "degree": "Master of Science in Data Science",
+        "major": "Master of Science in Data Science",
+        "start_date": "2017",
+        "end_date": "2019",
+        "graduation_year": "2019",
+        "gpa": ""
+      }
+    ],
+    "certifications": [
+      "Databricks Certified Data Engineer Associate"
+    ],
+    "awards": [],
+    "achievements": []
+  },
+  "flat": {
+    "full_name": "Marcus Lee",
+    "first_name": "Marcus",
+    "last_name": "Lee",
+    "email": "marcus.lee@example.com",
+    "phone": "555) 987-6543",
+    "location": "Denver, CO",
+    "current_company": "Northwind Analytics",
+    "current_role": "Senior Data Engineer",
+    "work_history": "Senior Data Engineer · Northwind Analytics · Data Platform — Mar 2019 – Jun 2022 — Built streaming ingestion pipeline processing 2M events/day.; Reduced pipeline cost by 40% through partition tuning.",
+    "degree": "Master of Science in Data Science",
+    "university": "Colorado State University",
+    "major": "Master of Science in Data Science",
+    "graduation_year": "2019",
+    "certifications": "Databricks Certified Data Engineer Associate",
+    "achievements": "Databricks Certified Data Engineer Associate | Built streaming ingestion pipeline processing 2M events/day. | Reduced pipeline cost by 40% through partition tuning.",
+    "headline": "Senior Data Engineer",
+    "years_experience": "3+ years"
+  },
+  "confidence": {
+    "email": 0.95,
+    "phone": 0.75,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "current_company": 0.7,
+    "current_role": 0.7,
+    "headline": 0.7,
+    "work_history": 0.55,
+    "degree": 0.65,
+    "university": 0.65,
+    "major": 0.65,
+    "graduation_year": 0.65,
+    "certifications": 0.7,
+    "achievements": 0.5,
+    "years_experience": 0.75
+  }
+}
