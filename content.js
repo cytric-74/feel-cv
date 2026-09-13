@@ -487,7 +487,7 @@
     return new Promise(res => chrome.storage.local.get("fcv_profile", d => res(d.fcv_profile || {})));
   }
 
-  // ── Autofill prompt banner ────────────────────────────────────────────────────
+  // Autofill prompt banner 
   // "Autofill" runs the dry run and turns the button into "Confirm (n)" — the
   // one confirmation surface both the banner and the popup's button share.
 
