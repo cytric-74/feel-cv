@@ -1,0 +1,8 @@
+Alex Rivera
+Austin, TX • alex.rivera@example.com • +1 512 555 0100 • GitHub [https://github.com/alexrivera] • LinkedIn [https://linkedin.com/in/alexrivera] • Portfolio [https://alexrivera.dev]
+
+Summary
+Backend engineer focused on distributed systems and developer tooling.
+
+Skills
+Languages: Go, Python, Rust

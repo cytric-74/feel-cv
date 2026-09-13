@@ -1,0 +1,70 @@
+{
+  "structured": {
+    "full_name": "Dana Whitfield",
+    "first_name": "Dana",
+    "last_name": "Whitfield",
+    "email": "dana.whitfield@example.com",
+    "phone": "(555) 611-9080",
+    "location": "Portland, OR",
+    "linkedin": "",
+    "github": "",
+    "portfolio": "",
+    "summary": "Backend engineer with a focus on reliability and developer tooling.",
+    "headline": "",
+    "years_experience": "",
+    "experience": [],
+    "projects": [],
+    "skills": {
+      "languages": [
+        "Go",
+        "Python"
+      ],
+      "frameworks": [],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [],
+      "other": []
+    },
+    "education": [],
+    "certifications": [
+      "AWS Certified Solutions Architect - Associate."
+    ],
+    "awards": [
+      "Regional Hackathon 2022 - 1st Runner-up."
+    ],
+    "achievements": [
+      "LeetCode - 300+ problems solved.",
+      "500+ GitHub stars across open source projects."
+    ]
+  },
+  "flat": {
+    "full_name": "Dana Whitfield",
+    "first_name": "Dana",
+    "last_name": "Whitfield",
+    "email": "dana.whitfield@example.com",
+    "phone": "(555) 611-9080",
+    "location": "Portland, OR",
+    "summary": "Backend engineer with a focus on reliability and developer tooling.",
+    "skills": "Go, Python",
+    "languages": "Go, Python",
+    "certifications": "AWS Certified Solutions Architect - Associate.",
+    "awards": "Regional Hackathon 2022 - 1st Runner-up.",
+    "achievements": "Regional Hackathon 2022 - 1st Runner-up. | AWS Certified Solutions Architect - Associate. | LeetCode - 300+ problems solved. | 500+ GitHub stars across open source projects.",
+    "headline": "Backend engineer with a focus on reliability and developer tooling."
+  },
+  "confidence": {
+    "email": 0.95,
+    "phone": 0.75,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "summary": 0.85,
+    "headline": 0.4,
+    "skills": 0.7,
+    "languages": 0.7,
+    "certifications": 0.7,
+    "awards": 0.7,
+    "achievements": 0.5
+  }
+}

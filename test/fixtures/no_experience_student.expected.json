@@ -1,0 +1,99 @@
+{
+  "structured": {
+    "full_name": "Priya Chen",
+    "first_name": "Priya",
+    "last_name": "Chen",
+    "email": "priya.chen@example.com",
+    "phone": "(555) 444-2211",
+    "location": "Boston, MA",
+    "linkedin": "",
+    "github": "",
+    "portfolio": "",
+    "summary": "",
+    "headline": "",
+    "years_experience": "",
+    "experience": [],
+    "projects": [
+      {
+        "name": "Campus Ride Share App",
+        "stack": "",
+        "description": "",
+        "date": "",
+        "bullets": [
+          "Built a carpool-matching app for students, used by over 500 people on campus.",
+          "Designed the matching algorithm and the Postgres schema behind it."
+        ],
+        "links": []
+      }
+    ],
+    "skills": {
+      "languages": [
+        "Python",
+        "C++"
+      ],
+      "frameworks": [
+        "Flask",
+        "React"
+      ],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [],
+      "other": []
+    },
+    "education": [
+      {
+        "institution": "Massachusetts Institute of Technology",
+        "degree": "Bachelor of Science in Computer Science",
+        "major": "Computer Science",
+        "start_date": "2023",
+        "end_date": "2027",
+        "graduation_year": "2027",
+        "gpa": "",
+        "inProgress": true
+      }
+    ],
+    "certifications": [],
+    "awards": [],
+    "achievements": []
+  },
+  "flat": {
+    "full_name": "Priya Chen",
+    "first_name": "Priya",
+    "last_name": "Chen",
+    "email": "priya.chen@example.com",
+    "phone": "(555) 444-2211",
+    "location": "Boston, MA",
+    "current_company": "Massachusetts Institute of Technology",
+    "current_role": "Bachelor Student",
+    "projects": "Campus Ride Share App",
+    "skills": "Python, C++, Flask, React",
+    "languages": "Python, C++",
+    "frameworks": "Flask, React",
+    "degree": "Bachelor of Science in Computer Science",
+    "university": "Massachusetts Institute of Technology",
+    "major": "Computer Science",
+    "graduation_year": "2027",
+    "achievements": "Built a carpool-matching app for students, used by over 500 people on campus.",
+    "headline": "Bachelor Student, Massachusetts Institute of Technology"
+  },
+  "confidence": {
+    "email": 0.95,
+    "phone": 0.75,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "current_company": 0.5,
+    "current_role": 0.5,
+    "headline": 0.5,
+    "projects": 0.55,
+    "skills": 0.7,
+    "languages": 0.7,
+    "frameworks": 0.7,
+    "degree": 0.65,
+    "university": 0.65,
+    "major": 0.65,
+    "graduation_year": 0.65,
+    "achievements": 0.5
+  }
+}

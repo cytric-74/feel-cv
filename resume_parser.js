@@ -26,6 +26,12 @@ const MINOR_WORDS = new Set(["and", "of", "in", "the", "for", "a", "an", "to", "
 function isHeadingLine(line) {
   const trimmed = line.replace(/:$/, "").trim();
   if (!trimmed || trimmed.length > 35 || /[.!?]$/.test(trimmed)) return false;
+  // a real heading doesn't enumerate a list ("Languages: Python, C++") and
+  // doesn't carry content after a colon ("Skills:" is fine, the trailing
+  // colon above already stripped it — but "Label: value" with the colon
+  // still in the middle is a content line, not a heading, regardless of how
+  // short and title-cased it happens to look).
+  if (/,/.test(trimmed) || /:\s*\S/.test(trimmed)) return false;
 
   const words = trimmed.replace(/[&/]/g, " ").split(/\s+/).filter(Boolean);
   // Real headings are 1-3 words. A longer phrase is more likely to be actual
@@ -101,7 +107,11 @@ function extractContactInfo(text) {
   const ghM = text.match(/github\.com\/([a-zA-Z0-9\-_%]+)/i);
   if (ghM) info.github = "https://github.com/" + ghM[1];
 
-  const portM = text.match(/https?:\/\/(?!(?:www\.)?(?:linkedin|github)\.)([a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,}[^\s]*)/i);
+  // stops at closing punctuation instead of swallowing it — otherwise a url
+  // written "(https://site.com)" or "[https://site.com]" (the latter is how
+  // a recovered pdf/docx hyperlink annotation gets spliced back into the
+  // text) leaks the trailing ")" or "]" into the captured value.
+  const portM = text.match(/https?:\/\/(?!(?:www\.)?(?:linkedin|github)\.)([a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,}[^\s)\]}>"']*)/i);
   if (portM) info.portfolio = portM[0];
 
   return info;
@@ -339,9 +349,29 @@ function extractExperienceEntries(sectionLines) {
   });
 }
 
+// experience entries get a real date range pulled out via DATE_RANGE_RE;
+// projects never got the same treatment, so a trailing "2026" or "2024 –
+// Present" had nowhere to go but into the name or description. this gives
+// projects the same treatment, anchored to the end of the line — which is
+// where a project header's date actually sits — rather than searching the
+// whole line and risking a false match inside the title itself.
+const TRAILING_DATE_RANGE_RE = new RegExp(`${DATE_RANGE_RE.source}\\s*$`, "i");
+const TRAILING_BARE_YEAR_RE = /\b(19|20)\d{2}\b\s*$/;
+
+function extractTrailingProjectDate(text) {
+  const rangeM = text.match(TRAILING_DATE_RANGE_RE);
+  if (rangeM) return { date: rangeM[0].trim(), text: text.slice(0, rangeM.index).trim() };
+
+  const yearM = text.match(TRAILING_BARE_YEAR_RE);
+  if (yearM) return { date: yearM[0].trim(), text: text.slice(0, yearM.index).trim() };
+
+  return { date: "", text };
+}
+
 function parseProjectAnchor(raw, bullets) {
   const links = raw.match(/https?:\/\/[^\s)]+|\bgithub\.com\/[^\s)]+/gi) || [];
-  const text = raw.replace(/\((?:github|gitlab|demo|live|link)\)/ig, "").trim();
+  const withoutMarkers = raw.replace(/\((?:github|gitlab|demo|live|link)\)/ig, "").trim();
+  const { date, text } = extractTrailingProjectDate(withoutMarkers);
 
   const parts = text.split(/\s+[–—-]\s+/).map(p => p.trim()).filter(Boolean);
   const name = parts[0] || text;
@@ -359,7 +389,7 @@ function parseProjectAnchor(raw, bullets) {
   }
 
   if (!name) return null;
-  return { name, stack, description, bullets, links };
+  return { name, stack, description, date, bullets, links };
 }
 
 const SENTENCE_END_RE = /[.!?:]$/;
@@ -425,6 +455,57 @@ function categorizeSkillLabel(label) {
   return "other";
 }
 
+// well-known technologies, checked by their own identity before falling
+// back to whatever category the resume's author happened to group them
+// under. that fallback is unavoidably imprecise — grouping react under a
+// "Cloud & Tools" heading is a perfectly normal (if slightly loose) way for
+// someone to organize their own resume, but it shouldn't mean react gets
+// filed as a cloud tool. anything not on these lists still falls back to
+// the label guess, so an unfamiliar or niche tool doesn't just disappear.
+const KNOWN_SKILL_IDENTITY = {
+  frameworks: [
+    "react", "react.js", "reactjs", "react native", "angular", "angularjs", "vue", "vue.js", "vuejs",
+    "svelte", "next.js", "nextjs", "nuxt", "nuxt.js", "django", "flask", "spring", "spring boot",
+    "express", "express.js", "fastapi", "laravel", "rails", "ruby on rails", ".net", "asp.net",
+    "nestjs", "ember", "ember.js", "backbone", "backbone.js", "jquery", "bootstrap", "tailwind",
+    "tailwind css", "gatsby", "remix", "solidjs", "qwik", "flutter", "ionic", "electron", "blazor",
+  ],
+  ml_ai: [
+    "pytorch", "tensorflow", "keras", "scikit-learn", "sklearn", "xgboost", "lightgbm",
+    "hugging face", "huggingface", "transformers", "opencv", "spacy", "nltk", "jax", "mlflow",
+    "langchain", "llamaindex", "pinns",
+  ],
+  data: [
+    "postgresql", "postgres", "mysql", "mongodb", "redis", "sqlite", "oracle", "databricks",
+    "snowflake", "cassandra", "dynamodb", "elasticsearch", "spark", "hadoop", "kafka", "airflow",
+    "pandas", "numpy", "dbt", "bigquery",
+  ],
+  cloud_tools: [
+    "aws", "azure", "gcp", "google cloud", "docker", "kubernetes", "k8s", "terraform", "ansible",
+    "jenkins", "github actions", "gitlab ci", "circleci", "helm", "prometheus", "grafana",
+    "cloudformation", "ec2", "s3", "lambda", "vercel", "netlify", "heroku", "git",
+  ],
+};
+
+const SKILL_IDENTITY_LOOKUP = new Map();
+for (const [cat, items] of Object.entries(KNOWN_SKILL_IDENTITY)) {
+  for (const item of items) SKILL_IDENTITY_LOOKUP.set(item, cat);
+}
+
+// a token often carries its own parenthetical detail ("AWS (EC2, S3)") —
+// check the bare form first, then the form with that detail stripped off.
+function identityCategoryForToken(token) {
+  const bare = token.toLowerCase().trim();
+  if (SKILL_IDENTITY_LOOKUP.has(bare)) return SKILL_IDENTITY_LOOKUP.get(bare);
+
+  const withoutParens = bare.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (withoutParens !== bare && SKILL_IDENTITY_LOOKUP.has(withoutParens)) {
+    return SKILL_IDENTITY_LOOKUP.get(withoutParens);
+  }
+
+  return null;
+}
+
 /** Split on common delimiters, but not inside parentheses (e.g. "AWS (EC2, S3)" stays one token). */
 function splitSkillTokens(str) {
   const parts = [];
@@ -444,27 +525,35 @@ function splitSkillTokens(str) {
 }
 
 // Prefers "Label: items" lines; falls back to a flat token list under "other".
+// each item is classified by its own identity first (see
+// identityCategoryForToken) and only falls back to the group's label when
+// the item itself isn't recognized.
 function extractSkillGroups(sectionLines) {
   const groups = { languages: [], frameworks: [], ml_ai: [], data: [], cloud_tools: [], other: [] };
   const LABEL_RE = /^([A-Za-z][A-Za-z /&+]{1,40}):\s*(.+)$/;
   let labeledCount = 0;
 
+  const classify = (token, fallbackCat) => {
+    const identityCat = identityCategoryForToken(token);
+    groups[identityCat || fallbackCat].push(token);
+  };
+
   for (const line of sectionLines) {
     const m = line.match(LABEL_RE);
     if (m) {
       labeledCount++;
-      const cat = categorizeSkillLabel(m[1]);
-      groups[cat].push(...splitSkillTokens(m[2]));
+      const labelCat = categorizeSkillLabel(m[1]);
+      for (const token of splitSkillTokens(m[2])) classify(token, labelCat);
     }
   }
 
   if (labeledCount === 0) {
-    const flat = [];
-    for (const line of sectionLines) flat.push(...splitSkillTokens(line));
-    groups.other = [...new Set(flat)];
-  } else {
-    for (const cat of Object.keys(groups)) groups[cat] = [...new Set(groups[cat])];
+    for (const line of sectionLines) {
+      for (const token of splitSkillTokens(line)) classify(token, "other");
+    }
   }
+
+  for (const cat of Object.keys(groups)) groups[cat] = [...new Set(groups[cat])];
 
   // Fall back to known language names if no "Languages:" label was found.
   if (!groups.languages.length) {
@@ -494,19 +583,58 @@ function stripDateAndGpaNoise(line) {
     .trim();
 }
 
+// "Bachelor of Arts"/"Master of Science"/"Master of Business Administration"
+// etc. are compound degree TITLES — the "of" there belongs to the degree
+// name, not to a major that follows. without accounting for this, the first
+// "of" after "Bachelor" gets mistaken for the major connector, and "Bachelor
+// of Arts in Marketing" turns into major "Arts in Marketing" instead of
+// "Marketing". this recognizes the common compound continuations so the
+// search for the *real* major connector starts after the full degree title.
+const DEGREE_COMPOUND_CONTINUATION_RE = /^\s+of\s+(?:arts|science|engineering|business\s+administration|philosophy|education|fine\s+arts|laws|technology)\b/i;
+
+// pulls the field of study out by following the degree line's own grammar —
+// "<Degree> in/of <Major>" — instead of only recognizing a major that's
+// already on a fixed keyword list. a hardcoded list can never cover every
+// field of study a resume might name, so this only falls back to it when
+// the line doesn't use a connector word at all ("B.Tech Computer Science"),
+// and even then captures just the matched span onward, not the whole line —
+// which is what previously left "major" as a verbatim duplicate of "degree".
+function extractMajorFromLine(line, degreeMatch) {
+  if (degreeMatch) {
+    let searchStart = degreeMatch.index + degreeMatch[0].length;
+    const compoundM = line.slice(searchStart).match(DEGREE_COMPOUND_CONTINUATION_RE);
+    if (compoundM) searchStart += compoundM[0].length;
+
+    const tail = line.slice(searchStart);
+    const connectorM = tail.match(/^[\s,:-]*\b(?:in|of)\b\s+(.+)$/i);
+    if (connectorM) {
+      const cleaned = stripDateAndGpaNoise(connectorM[1]);
+      if (cleaned) return cleaned;
+    }
+  }
+
+  const keywordM = MAJOR_RE.exec(line);
+  if (keywordM) {
+    const cleaned = stripDateAndGpaNoise(line.slice(keywordM.index));
+    if (cleaned) return cleaned;
+  }
+
+  return "";
+}
+
 function extractEducationEntries(sectionLines) {
   const entries = [];
   let current = null;
 
   const startNew = () => {
-    current = { institution: "", degree: "", major: "", start_date: "", end_date: "", graduation_year: "", gpa: "" };
+    current = { institution: "", degree: "", major: "", start_date: "", end_date: "", graduation_year: "", gpa: "", inProgress: false };
     entries.push(current);
   };
 
   for (const line of sectionLines) {
     if (line.length >= 120) continue;
     const isInst = INST_RE.test(line);
-    const isDegree = DEGREE_RE.test(line);
+    const degreeMatch = DEGREE_RE.exec(line);
 
     if (isInst) {
       if (current && current.institution) startNew();
@@ -514,13 +642,22 @@ function extractEducationEntries(sectionLines) {
       current.institution = stripDateAndGpaNoise(line) || line.trim();
     }
     if (!current) startNew();
-    if (isDegree && !current.degree) current.degree = stripDateAndGpaNoise(line) || line.trim();
+    if (degreeMatch && !current.degree) current.degree = stripDateAndGpaNoise(line) || line.trim();
 
-    const majorM = line.match(MAJOR_RE);
-    if (majorM && !current.major) current.major = stripDateAndGpaNoise(line) || line.trim();
+    if (!current.major) {
+      const major = extractMajorFromLine(line, degreeMatch);
+      if (major) current.major = major;
+    }
 
     const gpaM = line.match(GPA_RE);
     if (gpaM && !current.gpa) current.gpa = gpaM[1];
+
+    // "expected"/"present"/"current" on a degree line is a real signal that
+    // it's still in progress — stripDateAndGpaNoise throws the word away
+    // when cleaning the display text, but the fact itself is worth keeping.
+    if (/\bexpected\b|\bpresent\b|\bcurrent(?:ly)?\b|\bongoing\b/i.test(line)) {
+      current.inProgress = true;
+    }
 
     const years = line.match(YEAR_RE);
     if (years && years.length) {
@@ -542,16 +679,38 @@ function extractListItems(sectionLines) {
 }
 
 const CERT_ITEM_RE = /certifi|certificate|license|credential/i;
-const AWARD_ITEM_RE = /\baward|honou?r|runner-?up|winner|medal|scholarship|top\s+\d+(?:st|nd|rd|th)?\s*percentile|\b1st\b|\b2nd\b|\b3rd\b/i;
+const AWARD_ITEM_RE = /\baward|honou?r|runner-?up|winner|medal|scholarship|top\s+\d+(?:st|nd|rd|th)?\s*(?:percentile|percent|%)|\b1st\b|\b2nd\b|\b3rd\b/i;
+// a quantified personal metric ("240+ problems solved", "500+ github
+// stars", "50+ open source contributions") is neither a formal certification
+// nor an award — it's a practice/engagement stat. without a bucket for it,
+// a binary classifier has no honest place to put it except certifications
+// by elimination, which is simply the wrong category for it. the noun
+// often isn't right next to the number ("500+ GitHub stars"), so up to two
+// filler words are allowed in between rather than requiring them adjacent.
+const STAT_ITEM_RE = /\b\d+\+?\s*(?:[a-z]+\s+){0,2}(?:problems?|projects?|repositories|repos|contributions?|commits?|stars?|followers?|downloads?|users?|pull\s*requests?|prs?|issues?|articles?|posts?|questions?|challenges?|competitions?|hackathons?|puzzles?|katas?|exercises?|patents?|papers?|publications?|talks?|presentations?)\b/i;
 
 // For a combined "Certifications & Awards" section — classifies each item instead of duplicating it into both.
 function classifyCertAwardItems(items) {
-  const certifications = [], awards = [];
+  const certifications = [], awards = [], achievements = [];
   for (const item of items) {
     if (AWARD_ITEM_RE.test(item) && !CERT_ITEM_RE.test(item)) awards.push(item);
+    else if (STAT_ITEM_RE.test(item) && !CERT_ITEM_RE.test(item)) achievements.push(item);
     else certifications.push(item);
   }
-  return { certifications, awards };
+  return { certifications, awards, achievements };
+}
+
+// the same ambiguity shows up on a standalone "Achievements" heading (which
+// already gets treated as the awards section, see the section-finding
+// regex below) — a quantified stat listed there is just as likely to end
+// up mislabeled as a formal award otherwise.
+function splitAwardsAndAchievements(items) {
+  const awards = [], achievements = [];
+  for (const item of items) {
+    if (STAT_ITEM_RE.test(item) && !AWARD_ITEM_RE.test(item)) achievements.push(item);
+    else awards.push(item);
+  }
+  return { awards, achievements };
 }
 
 function buildStructuredProfile(text) {
@@ -604,12 +763,17 @@ function buildStructuredProfile(text) {
   const awardsSection = findSection(sections, /awards?|honou?rs?|achievements?/);
 
   if (certSection && awardsSection && certSection === awardsSection) {
-    const { certifications, awards } = classifyCertAwardItems(extractListItems(certSection.lines));
+    const { certifications, awards, achievements } = classifyCertAwardItems(extractListItems(certSection.lines));
     profile.certifications = certifications;
     profile.awards = awards;
+    profile.achievements = achievements;
   } else {
     if (certSection) profile.certifications = extractListItems(certSection.lines);
-    if (awardsSection) profile.awards = extractListItems(awardsSection.lines);
+    if (awardsSection) {
+      const { awards, achievements } = splitAwardsAndAchievements(extractListItems(awardsSection.lines));
+      profile.awards = awards;
+      profile.achievements = achievements;
+    }
   }
 
   const yoeM = text.match(/(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/i);
@@ -635,6 +799,16 @@ function rankDegree(entry) {
   return best;
 }
 
+// a short, form-friendly label ("M.Tech") rather than the full degree title,
+// for building a synthesized "current role" when there's no work history to
+// draw one from directly.
+function degreeAbbrev(entry) {
+  const m = DEGREE_RE.exec(entry.degree || "");
+  if (m) return m[0];
+  const firstWord = (entry.degree || "").trim().split(/\s+/)[0];
+  return firstWord || "Student";
+}
+
 function pickStrongestEducation(education) {
   if (!education || !education.length) return null;
   return [...education].sort((a, b) => {
@@ -657,6 +831,8 @@ function deriveFlatProfile(structured) {
   for (const k of passthrough) if (structured[k]) flat[k] = structured[k];
 
   const exp = structured.experience || [];
+  let inferredHeadline = null;
+
   if (exp.length) {
     if (exp[0].company) flat.current_company = exp[0].company;
     if (exp[0].role) flat.current_role = exp[0].role;
@@ -667,12 +843,29 @@ function deriveFlatProfile(structured) {
       const bulletText = (e.bullets || []).slice(0, 3).join("; ");
       return [head, dates, bulletText].filter(Boolean).join(" — ");
     }).filter(Boolean).join(" | ");
+  } else {
+    // no work history at all — a common shape for student and early-career
+    // resumes that list projects instead of jobs. a "current role/company"
+    // form field is still answerable in that case, but only when an
+    // education entry is clearly still in progress (expected/present/
+    // current) — anything less certain stays blank rather than confidently
+    // guessing a completed degree is someone's current status.
+    const activeEdu = [...(structured.education || [])]
+      .filter(e => e.inProgress)
+      .sort((a, b) => (parseInt(b.graduation_year, 10) || 0) - (parseInt(a.graduation_year, 10) || 0))[0];
+
+    if (activeEdu) {
+      const shortDegree = degreeAbbrev(activeEdu);
+      if (activeEdu.institution) flat.current_company = activeEdu.institution;
+      flat.current_role = `${shortDegree} Student`;
+      inferredHeadline = activeEdu.institution ? `${shortDegree} Student, ${activeEdu.institution}` : `${shortDegree} Student`;
+    }
   }
 
   const proj = structured.projects || [];
   if (proj.length) {
     flat.projects = proj.map(p => {
-      const head = [p.name, p.stack ? `(${p.stack})` : ""].filter(Boolean).join(" ");
+      const head = [p.name, p.date ? `(${p.date})` : "", p.stack ? `(${p.stack})` : ""].filter(Boolean).join(" ");
       return [head, p.description].filter(Boolean).join(" — ");
     }).filter(Boolean).join(" | ");
   }
@@ -681,6 +874,7 @@ function deriveFlatProfile(structured) {
   const allSkills = [...new Set(Object.values(skillGroups).flat())].filter(Boolean);
   if (allSkills.length) flat.skills = allSkills.join(", ");
   if ((skillGroups.languages || []).length) flat.languages = skillGroups.languages.join(", ");
+  if ((skillGroups.frameworks || []).length) flat.frameworks = skillGroups.frameworks.join(", ");
 
   const best = pickStrongestEducation(structured.education);
   if (best) {
@@ -700,11 +894,13 @@ function deriveFlatProfile(structured) {
   const achievementsList = [...new Set([
     ...(structured.awards || []),
     ...(structured.certifications || []),
+    ...(structured.achievements || []),
     ...impactBullets,
   ])].slice(0, 8);
   if (achievementsList.length) flat.achievements = achievementsList.join(" | ");
 
   if (exp[0]?.role) flat.headline = exp[0].role;
+  else if (inferredHeadline) flat.headline = inferredHeadline;
   else if (structured.summary) flat.headline = structured.summary.split(/(?<=[.!?])\s/)[0];
 
   const years = [];
@@ -752,8 +948,20 @@ function deriveFieldConfidence(structured) {
       confidence.headline = 0.4;
     }
     confidence.work_history = 0.55;
-  } else if (structured.summary) {
-    confidence.headline = 0.4;
+  } else {
+    // an in-progress education entry can stand in for "current role/company"
+    // when there's no work history at all, but it's an inference, not
+    // something the resume states directly — kept below what a real
+    // experience entry would carry, so an ai pass (or the user) can still
+    // improve on it.
+    const hasActiveEdu = (structured.education || []).some(e => e.inProgress);
+    if (hasActiveEdu) {
+      confidence.current_company = 0.5;
+      confidence.current_role = 0.5;
+      confidence.headline = 0.5;
+    } else if (structured.summary) {
+      confidence.headline = 0.4;
+    }
   }
 
   const proj = structured.projects || [];
@@ -764,6 +972,7 @@ function deriveFieldConfidence(structured) {
   if (anySkills) {
     confidence.skills = 0.7;
     if ((skillGroups.languages || []).length) confidence.languages = 0.7;
+    if ((skillGroups.frameworks || []).length) confidence.frameworks = 0.7;
   }
 
   if ((structured.education || []).length) {
@@ -775,7 +984,7 @@ function deriveFieldConfidence(structured) {
 
   if ((structured.certifications || []).length) confidence.certifications = 0.7;
   if ((structured.awards || []).length) confidence.awards = 0.7;
-  if (confidence.certifications || confidence.awards || exp.length || proj.length) {
+  if (confidence.certifications || confidence.awards || (structured.achievements || []).length || exp.length || proj.length) {
     confidence.achievements = 0.5;
   }
 
@@ -795,7 +1004,7 @@ function deriveFieldConfidence(structured) {
 const SCALAR_AI_KEYS = ["full_name", "first_name", "last_name", "location", "summary", "headline", "years_experience", "email", "phone", "linkedin", "github", "portfolio"];
 const ARRAY_AI_SHAPES = {
   experience: ["company", "role", "domain", "start_date", "end_date", "duration", "bullets"],
-  projects: ["name", "stack", "description", "bullets", "links"],
+  projects: ["name", "date", "stack", "description", "bullets", "links"],
   education: ["institution", "degree", "major", "start_date", "end_date", "graduation_year", "gpa"],
   certifications: null,
   awards: null,
@@ -898,7 +1107,7 @@ function validateAIStructured(raw) {
   }
 
   out.experience = cleanEntryArray(raw.experience, ["company", "role", "domain", "start_date", "end_date", "duration", "bullets"]);
-  out.projects = cleanEntryArray(raw.projects, ["name", "stack", "description", "bullets", "links"]);
+  out.projects = cleanEntryArray(raw.projects, ["name", "date", "stack", "description", "bullets", "links"]);
   out.education = cleanEntryArray(raw.education, ["institution", "degree", "major", "start_date", "end_date", "graduation_year", "gpa"]);
   out.certifications = cleanStringArray(raw.certifications);
   out.awards = cleanStringArray(raw.awards);

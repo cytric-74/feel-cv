@@ -1,0 +1,89 @@
+{
+  "structured": {
+    "full_name": "Sam Okafor",
+    "first_name": "Sam",
+    "last_name": "Okafor",
+    "email": "sam.okafor@example.com",
+    "phone": "(555) 300-1122",
+    "location": "Chicago, IL",
+    "linkedin": "",
+    "github": "",
+    "portfolio": "",
+    "summary": "",
+    "headline": "",
+    "years_experience": "",
+    "experience": [],
+    "projects": [
+      {
+        "name": "InkGuard",
+        "stack": "",
+        "description": "Signature Forgery Detection",
+        "date": "2026",
+        "bullets": [
+          "Built a signature verification web app from scratch.",
+          "Trained a model to score forgery likelihood."
+        ],
+        "links": []
+      },
+      {
+        "name": "Feel CV",
+        "stack": "",
+        "description": "Resume Parser and Application Assistant",
+        "date": "2024 – Present",
+        "bullets": [
+          "Built a browser extension that parses resumes locally."
+        ],
+        "links": []
+      },
+      {
+        "name": "Physics-Informed Neural Network for 2D Flow",
+        "stack": "",
+        "description": "",
+        "date": "2026",
+        "bullets": [
+          "Solved the 2D Navier–Stokes equations without simulator training data."
+        ],
+        "links": []
+      }
+    ],
+    "skills": {
+      "languages": [
+        "Python",
+        "C++"
+      ],
+      "frameworks": [],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [],
+      "other": []
+    },
+    "education": [],
+    "certifications": [],
+    "awards": [],
+    "achievements": []
+  },
+  "flat": {
+    "full_name": "Sam Okafor",
+    "first_name": "Sam",
+    "last_name": "Okafor",
+    "email": "sam.okafor@example.com",
+    "phone": "(555) 300-1122",
+    "location": "Chicago, IL",
+    "projects": "InkGuard (2026) — Signature Forgery Detection | Feel CV (2024 – Present) — Resume Parser and Application Assistant | Physics-Informed Neural Network for 2D Flow (2026)",
+    "skills": "Python, C++",
+    "languages": "Python, C++",
+    "achievements": "Solved the 2D Navier–Stokes equations without simulator training data."
+  },
+  "confidence": {
+    "email": 0.95,
+    "phone": 0.75,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "projects": 0.55,
+    "skills": 0.7,
+    "languages": 0.7,
+    "achievements": 0.5
+  }
+}

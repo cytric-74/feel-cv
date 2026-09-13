@@ -1,0 +1,14 @@
+Dana Whitfield
+dana.whitfield@example.com | (555) 611-9080 | Portland, OR
+
+Summary
+Backend engineer with a focus on reliability and developer tooling.
+
+Skills
+Languages: Go, Python
+
+Certifications and Awards
+AWS Certified Solutions Architect - Associate.
+Regional Hackathon 2022 - 1st Runner-up.
+LeetCode - 300+ problems solved.
+500+ GitHub stars across open source projects.

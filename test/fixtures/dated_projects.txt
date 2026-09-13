@@ -1,0 +1,16 @@
+Sam Okafor
+sam.okafor@example.com | (555) 300-1122 | Chicago, IL
+
+Projects
+InkGuard – Signature Forgery Detection (GitHub) 2026
+- Built a signature verification web app from scratch.
+- Trained a model to score forgery likelihood.
+
+Feel CV – Resume Parser and Application Assistant (GitHub) 2024 – Present
+- Built a browser extension that parses resumes locally.
+
+Physics-Informed Neural Network for 2D Flow (GitHub) 2026
+- Solved the 2D Navier–Stokes equations without simulator training data.
+
+Skills
+Languages: Python, C++

@@ -104,6 +104,10 @@ window.FCV_FIELD_REGISTRY = {
     label: "Programming Languages",
     patterns: ["programming languages", "languages known", "coding languages"]
   },
+  frameworks: {
+    label: "Frameworks / Libraries",
+    patterns: ["frameworks and libraries", "frameworks / libraries", "frameworks", "libraries"]
+  },
 
   // ── Application-specific ─────────────────────────────────────────────────
   cover_letter: {

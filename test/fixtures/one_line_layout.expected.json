@@ -28,22 +28,31 @@
     ],
     "projects": [],
     "skills": {
-      "languages": [],
+      "languages": [
+        "Python",
+        "Scala"
+      ],
       "frameworks": [],
       "ml_ai": [],
-      "data": [],
-      "cloud_tools": [],
+      "data": [
+        "Kafka",
+        "Spark"
+      ],
+      "cloud_tools": [
+        "AWS"
+      ],
       "other": []
     },
     "education": [
       {
         "institution": "Colorado State University",
         "degree": "Master of Science in Data Science",
-        "major": "Master of Science in Data Science",
+        "major": "Data Science",
         "start_date": "2017",
         "end_date": "2019",
         "graduation_year": "2019",
-        "gpa": ""
+        "gpa": "",
+        "inProgress": false
       }
     ],
     "certifications": [
@@ -62,9 +71,11 @@
     "current_company": "Northwind Analytics",
     "current_role": "Senior Data Engineer",
     "work_history": "Senior Data Engineer · Northwind Analytics · Data Platform — Mar 2019 – Jun 2022 — Built streaming ingestion pipeline processing 2M events/day.; Reduced pipeline cost by 40% through partition tuning.",
+    "skills": "Python, Scala, Kafka, Spark, AWS",
+    "languages": "Python, Scala",
     "degree": "Master of Science in Data Science",
     "university": "Colorado State University",
-    "major": "Master of Science in Data Science",
+    "major": "Data Science",
     "graduation_year": "2019",
     "certifications": "Databricks Certified Data Engineer Associate",
     "achievements": "Databricks Certified Data Engineer Associate | Built streaming ingestion pipeline processing 2M events/day. | Reduced pipeline cost by 40% through partition tuning.",
@@ -82,6 +93,8 @@
     "current_role": 0.7,
     "headline": 0.7,
     "work_history": 0.55,
+    "skills": 0.7,
+    "languages": 0.7,
     "degree": 0.65,
     "university": 0.65,
     "major": 0.65,

@@ -1,0 +1,15 @@
+Priya Chen
+priya.chen@example.com | (555) 444-2211 | Boston, MA
+
+Projects
+Campus Ride Share App
+- Built a carpool-matching app for students, used by over 500 people on campus.
+- Designed the matching algorithm and the Postgres schema behind it.
+
+Skills
+Languages: Python, C++
+Frameworks: Flask, React
+
+Education
+Massachusetts Institute of Technology Sep 2023 - Expected May 2027
+Bachelor of Science in Computer Science

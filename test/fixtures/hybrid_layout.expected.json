@@ -43,11 +43,12 @@
       {
         "institution": "Seattle Pacific University",
         "degree": "Bachelor of Arts in Marketing",
-        "major": "",
+        "major": "Marketing",
         "start_date": "2015",
         "end_date": "2019",
         "graduation_year": "2019",
-        "gpa": ""
+        "gpa": "",
+        "inProgress": false
       }
     ],
     "certifications": [],
@@ -69,6 +70,7 @@
     "skills": "HubSpot, Salesforce, Google Analytics",
     "degree": "Bachelor of Arts in Marketing",
     "university": "Seattle Pacific University",
+    "major": "Marketing",
     "graduation_year": "2019",
     "awards": "Marketing Team of the Year 2022",
     "achievements": "Marketing Team of the Year 2022 | Launched three product lines generating $4M in year-one revenue.",

@@ -96,6 +96,19 @@ function detectColumnSplit(rows, pageWidth) {
   return splitX;
 }
 
+// a link annotation's own url is trusted as-is except for two normalizations
+// shared by both the pdf and docx recovery paths: a mailto: link becomes
+// just the email address, and a bare domain with no scheme ("www.foo.com",
+// which some editors store links as) gets "https://" added so the portfolio
+// regex — which requires a scheme — actually has something to match.
+function normalizeLinkUrl(rawUrl) {
+  const trimmed = (rawUrl || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.toLowerCase().startsWith("mailto:")) return trimmed.slice(7);
+  if (!/^https?:\/\//i.test(trimmed)) return "https://" + trimmed;
+  return trimmed;
+}
+
 async function extractPDF(file) {
   const pdfjsLib = window.pdfjsLib || window["pdfjs-dist/build/pdf"];
   if (!pdfjsLib) {
@@ -142,6 +155,43 @@ async function extractPDF(file) {
     // PDF Y grows upward, so sort descending to get top-to-bottom order.
     const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
     const rows = sortedYs.map(y => ({ y, items: lineMap.get(y) }));
+
+    // a clickable "GitHub"/"LinkedIn"/"Portfolio" label carries its real url
+    // in the pdf's link-annotation layer, not in the text stream above — so
+    // no regex over that text will ever find it. splicing the actual url in
+    // next to the row it visually sits on means the existing contact-info
+    // regexes in resume_parser.js just find it naturally, with no separate
+    // annotation-handling path needed downstream.
+    try {
+      const linkAnnotations = (await page.getAnnotations())
+        .filter(a => a.subtype === "Link" && a.url && Array.isArray(a.rect));
+
+      for (const link of linkAnnotations) {
+        const displayUrl = normalizeLinkUrl(link.url);
+        if (!displayUrl) continue;
+
+        const linkY = (link.rect[1] + link.rect[3]) / 2;
+        const linkX = link.rect[2]; // right edge, so it sorts in after the visible label text
+
+        let nearestRow = null, nearestDist = Infinity;
+        for (const row of rows) {
+          const dist = Math.abs(row.y - linkY);
+          if (dist < nearestDist) { nearestDist = dist; nearestRow = row; }
+        }
+
+        // an annotation's rect is centered on the glyph bounds, not the text
+        // baseline the rows above are keyed by, so it needs a looser
+        // tolerance than same-line jitter does — but still tied to it rather
+        // than an unrelated magic number.
+        const LINK_ROW_TOLERANCE = Y_TOLERANCE * 3;
+        if (nearestRow && nearestDist <= LINK_ROW_TOLERANCE) {
+          nearestRow.items.push({ x: linkX + 0.01, str: `[${displayUrl}]` });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not read link annotations on this page:", err);
+    }
+
     const pageWidth = page.view ? page.view[2] - page.view[0] : 0;
     const splitX = detectColumnSplit(rows, pageWidth);
 
@@ -171,11 +221,38 @@ async function extractPDF(file) {
   return normalizeResumeText(pageTexts.join("\n"));
 }
 
+// extractRawText() throws hyperlinks away entirely, the same way a naive pdf
+// text dump does — convertToHtml() keeps them as real <a href> elements, so
+// they can be recovered the same way the pdf path recovers them: splice the
+// target next to the visible label before flattening to plain text, and let
+// the existing contact-info regexes in resume_parser.js do the rest.
 async function extractDOCX(file) {
   if (!window.mammoth) throw new Error("mammoth not loaded");
   const ab = await file.arrayBuffer();
-  const result = await window.mammoth.extractRawText({ arrayBuffer: ab });
-  return result.value;
+  const result = await window.mammoth.convertToHtml({ arrayBuffer: ab });
+  return htmlToTextWithLinks(result.value);
+}
+
+function decodeHtmlEntities(str) {
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = str; // a textarea's content is always plain text, never parsed as markup
+  return textarea.value;
+}
+
+function htmlToTextWithLinks(html) {
+  const text = html
+    .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (match, href, inner) => {
+      const label = inner.replace(/<[^>]+>/g, "").trim();
+      const display = normalizeLinkUrl(href);
+      if (!display) return label;
+      return label ? `${label} [${display}]` : `[${display}]`;
+    })
+    .replace(/<li[^>]*>/gi, "• ") // list items lose their bullet glyph once tags are stripped otherwise
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+
+  return decodeHtmlEntities(text);
 }
 
 // Structured parsing and AI prompt/merge logic live in resume_parser.js.

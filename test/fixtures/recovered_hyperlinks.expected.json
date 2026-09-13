@@ -1,0 +1,64 @@
+{
+  "structured": {
+    "full_name": "Alex Rivera",
+    "first_name": "Alex",
+    "last_name": "Rivera",
+    "email": "alex.rivera@example.com",
+    "phone": "+1 512 555 0100",
+    "location": "Rivera Austin, TX",
+    "linkedin": "https://linkedin.com/in/alexrivera",
+    "github": "https://github.com/alexrivera",
+    "portfolio": "https://alexrivera.dev",
+    "summary": "Backend engineer focused on distributed systems and developer tooling.",
+    "headline": "",
+    "years_experience": "",
+    "experience": [],
+    "projects": [],
+    "skills": {
+      "languages": [
+        "Go",
+        "Python",
+        "Rust"
+      ],
+      "frameworks": [],
+      "ml_ai": [],
+      "data": [],
+      "cloud_tools": [],
+      "other": []
+    },
+    "education": [],
+    "certifications": [],
+    "awards": [],
+    "achievements": []
+  },
+  "flat": {
+    "full_name": "Alex Rivera",
+    "first_name": "Alex",
+    "last_name": "Rivera",
+    "email": "alex.rivera@example.com",
+    "phone": "+1 512 555 0100",
+    "location": "Rivera Austin, TX",
+    "linkedin": "https://linkedin.com/in/alexrivera",
+    "github": "https://github.com/alexrivera",
+    "portfolio": "https://alexrivera.dev",
+    "summary": "Backend engineer focused on distributed systems and developer tooling.",
+    "skills": "Go, Python, Rust",
+    "languages": "Go, Python, Rust",
+    "headline": "Backend engineer focused on distributed systems and developer tooling."
+  },
+  "confidence": {
+    "email": 0.95,
+    "linkedin": 0.95,
+    "github": 0.95,
+    "phone": 0.75,
+    "portfolio": 0.6,
+    "full_name": 0.8,
+    "first_name": 0.8,
+    "last_name": 0.8,
+    "location": 0.55,
+    "summary": 0.85,
+    "headline": 0.4,
+    "skills": 0.7,
+    "languages": 0.7
+  }
+}

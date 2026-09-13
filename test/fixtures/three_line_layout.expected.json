@@ -46,11 +46,12 @@
       {
         "institution": "University of Texas",
         "degree": "Bachelor of Science in Computer Science",
-        "major": "Bachelor of Science in Computer Science",
+        "major": "Computer Science",
         "start_date": "2016",
         "end_date": "2020",
         "graduation_year": "2020",
-        "gpa": ""
+        "gpa": "",
+        "inProgress": false
       }
     ],
     "certifications": [
@@ -72,9 +73,10 @@
     "work_history": "Software Engineer · Skyline Software Inc. — Jan 2021 – Present — Led migration of the billing service, cutting latency by 30%.; Mentored two junior engineers.",
     "skills": "Python, JavaScript, SQL, React, Django",
     "languages": "Python, JavaScript, SQL",
+    "frameworks": "React, Django",
     "degree": "Bachelor of Science in Computer Science",
     "university": "University of Texas",
-    "major": "Bachelor of Science in Computer Science",
+    "major": "Computer Science",
     "graduation_year": "2020",
     "certifications": "AWS Certified Solutions Architect",
     "achievements": "AWS Certified Solutions Architect | Led migration of the billing service, cutting latency by 30%.",
@@ -95,6 +97,7 @@
     "work_history": 0.55,
     "skills": 0.7,
     "languages": 0.7,
+    "frameworks": 0.7,
     "degree": 0.65,
     "university": 0.65,
     "major": 0.65,
