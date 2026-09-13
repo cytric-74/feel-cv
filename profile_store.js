@@ -1,7 +1,6 @@
-// shared field-level store: every value on the profile remembers where it
-// came from and how confident that source was, so a new resume upload (or
-// an ai pass, or a manually typed correction) gets compared against what's
-// already there instead of blindly overwriting it or blindly deferring to it.
+// field-level store: every value remembers its source and confidence, so a
+// new resume/ai/manual write gets compared against what's already there
+// instead of blindly overwriting or deferring to it.
 
 "use strict";
 
@@ -30,9 +29,8 @@ function fcvGetFlat(store) {
   return flat;
 }
 
-// a manual edit is the user overriding the system, so it stands until they
-// change it again — nothing else gets to quietly replace it. otherwise the
-// higher-confidence value wins, and a tie goes to whichever record is newer.
+// a manual edit stands until the user changes it again; otherwise the
+// higher-confidence value wins, and a tie goes to the newer record
 function fcvResolveField(existing, incoming) {
   if (!incoming) return existing;
   if (!existing) return incoming;
@@ -64,10 +62,8 @@ function fcvSaveStore(store) {
   });
 }
 
-// incoming looks like { fieldKey: { value, source, confidence } }. returns
-// the saved store plus a list of what changed, so a caller can tell the user
-// something like "6 fields updated, 2 kept from before" instead of just
-// swapping the whole profile out from under them.
+// incoming: { fieldKey: { value, source, confidence } }. returns the saved
+// store plus a list of what changed, for messages like "6 updated, 2 kept".
 async function fcvApplyFields(incoming, opts = {}) {
   const store = await fcvLoadStore();
   if (opts.bumpResumeVersion) store.resumeVersion += 1;

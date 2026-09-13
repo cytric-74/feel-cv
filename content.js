@@ -1,14 +1,14 @@
-// Injected into every page: detects job forms, autofills them, and learns edited fields.
+// Detects job forms, autofills them, and learns edited fields.
 
 (() => {
   "use strict";
 
-  // Base selector for fillable fields. Scoring also excludes password fields.
+  // scoring also excludes password fields
   const FILLABLE_EXCLUSIONS = ":not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file])";
   const FILLABLE_SELECTOR = `input${FILLABLE_EXCLUSIONS}, textarea, select`;
   const SCORING_INPUT_SELECTOR = `input${FILLABLE_EXCLUSIONS}:not([type=password]), textarea, select`;
 
-  // Fallback if field_registry.js fails to load — just enough to not crash.
+  // fallback if field_registry.js fails to load
   const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
     full_name: { patterns: ["full name", "your name", "applicant name"] },
     first_name: { patterns: ["first name", "given name", "forename"] },
@@ -19,14 +19,11 @@
   };
 
   const SKIP_LEARNING  = new Set(["notice_period", "cover_letter", "motivation"]);
-  // Never autofill these (user must generate them per-job)
+  // user must generate these per-job, never autofill
   const SKIP_AUTOFILL  = new Set(["cover_letter", "motivation", "notice_period", "salary"]);
 
-  // a plain substring check lets a short pattern like "mail" or "cell" match
-  // inside an unrelated word ("voicemail", "cellular") — word boundaries fix
-  // that. a short, generic pattern is also only trusted when it turns up in a
-  // genuinely short, label-shaped string; buried in a long sentence it's just
-  // as likely to be incidental as it is to be the actual subject of the field.
+  // word boundary so "mail" doesn't match inside "voicemail"; a short/generic
+  // pattern also needs a short label, or it's too weak a signal to trust
   function scorePatternMatch(norm, pattern) {
     const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (!new RegExp(`\\b${escaped}\\b`).test(norm)) return 0;
@@ -46,12 +43,8 @@
     return best;
   }
 
-  // Job application page detector — needs both a job page and real form fields.
-
-  // mirrors the content_scripts matches list in manifest.json — that's what
-  // actually decides where this file gets injected automatically; this array
-  // only affects scoring once the script is already running somewhere. keep
-  // the two lists in sync by hand since a static manifest can't read this file.
+  // keep in sync with manifest.json's content_scripts matches — that list
+  // decides injection, this one only affects scoring once already running
   const ATS_URL_SIGNALS = [
     "greenhouse.io", "lever.co", "ashby.io", "ashbyhq.com",
     "workday.com", "bamboohr.com", "smartrecruiters.com", "jobvite.com",
@@ -86,11 +79,9 @@
     "how did you hear", "linkedin", "github", "portfolio"
   ];
 
-  // rejecting only the current viewport would also flag ordinary
-  // below-the-fold fields in any normal multi-screen form, so this checks
-  // against the full scrollable document instead — legitimate content is
-  // somewhere inside that area; a field parked at left:-9999px to hide it
-  // from autofill-harvesting scripts is not.
+  // checked against the full document, not just the viewport, so an ordinary
+  // below-the-fold field isn't flagged — only one parked off-canvas (e.g.
+  // left:-9999px) to hide it from harvesting is
   function isVisible(el) {
     if (!el || el.disabled) return false;
     const style = window.getComputedStyle(el);
@@ -110,10 +101,8 @@
     return true;
   }
 
-  // returns the first candidate found, checked in order of how reliable that
-  // source actually is — not the longest string among them. a real bound
-  // <label> is unambiguous; a placeholder is frequently an example value
-  // ("e.g. john@doe.com") rather than the label at all, so it's trusted last.
+  // first candidate in reliability order, not the longest — a placeholder is
+  // often an example value, not the label, so it's trusted last
   function firstUsable(...candidates) {
     for (const c of candidates) {
       const t = (c || "").trim();
@@ -244,10 +233,8 @@
 
   // ── Field discovery + autofill ───────────────────────────────────────────────
 
-  // once a field on this site has been matched, remember it by name/id so a
-  // future visit — same site, page reloaded, spa re-rendered the form — can
-  // skip re-running the heuristic entirely instead of re-guessing from
-  // scratch every time. keyed by hostname, capped so it can't grow forever.
+  // remembers matched fields by name/id per hostname, so a future visit skips
+  // re-guessing; capped so it can't grow forever
   const SITE_CACHE_KEY = "fcv_site_field_cache";
   const SITE_CACHE_MAX_HOSTS = 200;
 
@@ -260,9 +247,7 @@
     return null;
   }
 
-  // the cached mapping is only trusted while the label text that produced it
-  // hasn't changed — if the page's markup drifts, this falls back to a fresh
-  // heuristic match on its own rather than keep serving a stale answer.
+  // only trusted while the label that produced it hasn't changed
   function rememberFieldMapping(cacheKey, key, labelSnapshot) {
     if (!cacheKey) return;
     const host = location.hostname;
@@ -348,16 +333,14 @@
     return true;
   }
 
-  // a field the site (or the user) already populated shouldn't get silently
-  // clobbered by whatever's in the profile — a select's own placeholder
-  // option often carries a non-empty value, so that alone doesn't count.
+  // a select's placeholder option often carries a non-empty value, so that
+  // alone doesn't count as "filled"
   function isFieldFilled(el) {
     if (el.tagName.toLowerCase() === "select") return el.selectedIndex > 0 && !!el.value;
     return !!el.value && el.value.trim().length > 0;
   }
 
-  // a dry run: figures out what *would* happen without touching the dom, so
-  // the banner can show the user a real count before anything gets written.
+  // dry run — no dom writes, so the banner can show a real count first
   function planAutofill(profile) {
     const fields = discoverFields();
     const toFill = [], alreadyFilled = [], skippedByPolicy = [];
@@ -372,10 +355,8 @@
     return { fields, toFill, alreadyFilled, skippedByPolicy };
   }
 
-  // hit-tests the field at its own on-screen center point. a field an
-  // attacker parked off-canvas or tucked under an overlay either isn't
-  // there once we've scrolled to it, or something else answers the hit-test
-  // instead of the field itself — either way, it doesn't get filled.
+  // hit-test at the field's own center — a decoy hidden off-canvas or under
+  // an overlay fails this even after being scrolled into view
   function isCoveredOrHidden(el) {
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return true;
@@ -396,12 +377,9 @@
   const SPOTLIGHT_DELAY_MS = 180;
   let autofillCancelled = false;
 
-  // walks the page field by field instead of filling everything at once out
-  // of sight — each target gets scrolled into view, hit-tested right there,
-  // and only then filled. a hidden decoy field either becomes visibly wrong
-  // once it's on screen, or fails the hit-test and gets skipped outright.
-  // empty fields are always included; already-filled ones only when the
-  // user explicitly opted into overwriting them.
+  // walks fields one at a time — scroll into view, hit-test, then fill —
+  // instead of writing to all of them at once out of sight. already-filled
+  // fields are only touched if the user opted into overwriting them.
   async function applyAutofill(plan, profile, overwrite, onProgress) {
     const targets = overwrite ? [...plan.toFill, ...plan.alreadyFilled] : plan.toFill;
     let filled = 0;
@@ -439,14 +417,9 @@
   }
 
   // ── Learning from fields the user fills in manually ──────────────────────────
-  // a page's own script can set el.value and dispatch a synthetic change/blur
-  // just as easily as a real keystroke can — nothing about the event itself
-  // tells them apart unless something checks. this section makes two things
-  // true before a value is ever proposed for saving: the event that fired
-  // must be genuinely user-generated, and it must follow a genuine focus or
-  // pointerdown on that same field a moment earlier — a script can dispatch
-  // one fake event, but it can't fake the browser's own isTrusted flag, and
-  // it can't manufacture the interaction history a real edit leaves behind.
+  // a script can set el.value and dispatch a synthetic change/blur as easily
+  // as a real keystroke — so a value is only proposed for saving if the event
+  // is genuinely trusted AND follows a real focus/pointerdown on that field.
 
   const watchedFields = new Map(); // element → key
   const trustedInteractionAt = new WeakMap(); // element → timestamp of its last genuine focus/pointerdown
@@ -457,12 +430,9 @@
     trustedInteractionAt.set(e.target, Date.now());
   }
 
-  // a burst of several fields "learned" within a couple seconds of each
-  // other isn't how a person fills out a form — it's how a script looping
-  // over fields looks. isTrusted already blocks a lone forged event outright;
-  // this is a softer, second layer for anything unusual enough to be worth a
-  // more skeptical look, surfaced as a visibly different prompt rather than
-  // silently dropped, since a fast legitimate multi-field paste is possible too.
+  // several fields "learned" within seconds of each other looks like a script
+  // looping over fields, not a person typing — flagged as suspicious rather
+  // than dropped, since a fast legitimate multi-field paste is also possible
   const recentLearnTimestamps = [];
   const BURST_WINDOW_MS = 2000;
   const BURST_THRESHOLD = 3;
@@ -518,11 +488,8 @@
   }
 
   // ── Autofill prompt banner ────────────────────────────────────────────────────
-  // a click on "Autofill" doesn't fill anything by itself — it runs the dry
-  // run above and turns the button into a "Confirm (n)" that only then
-  // writes to the page. this is the one surface both the in-page banner and
-  // the popup's "Autofill Form" button route through, so neither one ever
-  // fires blind.
+  // "Autofill" runs the dry run and turns the button into "Confirm (n)" — the
+  // one confirmation surface both the banner and the popup's button share.
 
   let bannerShown = false;
   let banner = null, textSpan = null, fillBtn = null, overwriteRow = null, overwriteBox = null;
@@ -531,9 +498,8 @@
   function resetBannerState() {
     banner = null; textSpan = null; fillBtn = null; overwriteRow = null; overwriteBox = null;
     bannerShown = false; pendingPlan = null; pendingProfile = null;
-    // autofillCancelled is deliberately not reset here — a run in progress
-    // needs to see it stay true until its loop actually notices and stops.
-    // it gets re-armed in presentPlan(), right before the next run starts.
+    // autofillCancelled stays as-is here — re-armed in presentPlan() instead,
+    // so a run already in progress still sees it and stops
   }
 
   function planSummaryText(plan) {

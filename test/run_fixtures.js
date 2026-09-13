@@ -1,9 +1,5 @@
-// regression harness for resume_parser.js. resumes are heuristic-heavy —
-// the commit history for this file is full of "fixed X, which had broken Y"
-// because a regex tweak for one layout kept quietly breaking another. this
-// runs the real parser against a handful of resumes covering the layouts
-// that have bitten it before, and fails if the output drifts from the last
-// recorded golden, so a future change gets caught before it ships silently.
+// regression harness for resume_parser.js — runs it against fixture resumes
+// and fails if the output drifts from the recorded golden.
 //
 // usage:
 //   node test/run_fixtures.js            check fixtures against their goldens

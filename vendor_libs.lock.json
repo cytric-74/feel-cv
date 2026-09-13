@@ -1,5 +1,5 @@
 {
-  "_comment": "records exactly which vendored build of each third-party file this extension ships. download_libs.js/.ps1 verify against this after fetching, and it's what tells you later whether a file on disk still matches what was actually reviewed and shipped.",
+  "_comment": "which vendored build of each third-party file this extension ships — download_libs.js/.ps1 verify against this.",
   "libs": {
     "pdf.min.js": {
       "version": "3.11.174",

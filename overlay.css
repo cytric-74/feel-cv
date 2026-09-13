@@ -83,10 +83,8 @@
   cursor: default;
 }
 
-/* applied to the field currently being walked through during autofill —
-   deliberately more attention-grabbing than the brief "just filled" glow,
-   since the point here is to make sure a human actually sees this field
-   before real data lands in it. */
+/* the field currently being walked through during autofill — more
+   attention-grabbing than the brief "just filled" glow, on purpose */
 .fcv-spotlight {
   outline: 3px solid #fdb14c !important;
   outline-offset: 2px;

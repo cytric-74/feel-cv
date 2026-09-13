@@ -1,10 +1,9 @@
-// Section-aware resume extraction. Builds a structured resume object, then
-// derives the flat profile that field_registry.js/content.js autofill against.
+// Section-aware resume extraction: builds a structured profile, then derives
+// the flat profile that field_registry.js/content.js autofill against.
 
 "use strict";
 
-// Keyword stems, not exact phrases, so "Teaching Experience" or "Clinical
-// Experience" both match on "experience" without listing every variant.
+// stems, not exact phrases, so "Teaching Experience" also matches "experience"
 const CORE_HEADING_STEMS = [
   "experience", "employment", "internship",
   "education", "academic",
@@ -20,22 +19,17 @@ const CORE_HEADING_STEMS = [
 const CORE_HEADING_RE = new RegExp(`\\b(?:${CORE_HEADING_STEMS.join("|")})`, "i");
 const MINOR_WORDS = new Set(["and", "of", "in", "the", "for", "a", "an", "to", "&", "/"]);
 
-// A heading line is short, Title Case or ALL CAPS, has no sentence
-// punctuation, and contains a core stem — this is how "Certifications &
-// Awards" or "Teaching Experience" get recognized without a fixed phrase list.
+// short, Title Case/ALL CAPS, no sentence punctuation, contains a core stem —
+// recognizes "Certifications & Awards" or "Teaching Experience" without a
+// fixed phrase list
 function isHeadingLine(line) {
   const trimmed = line.replace(/:$/, "").trim();
   if (!trimmed || trimmed.length > 35 || /[.!?]$/.test(trimmed)) return false;
-  // a real heading doesn't enumerate a list ("Languages: Python, C++") and
-  // doesn't carry content after a colon ("Skills:" is fine, the trailing
-  // colon above already stripped it — but "Label: value" with the colon
-  // still in the middle is a content line, not a heading, regardless of how
-  // short and title-cased it happens to look).
+  // a list ("Languages: Python, C++") or "Label: value" is content, not a heading
   if (/,/.test(trimmed) || /:\s*\S/.test(trimmed)) return false;
 
   const words = trimmed.replace(/[&/]/g, " ").split(/\s+/).filter(Boolean);
-  // Real headings are 1-3 words. A longer phrase is more likely to be actual
-  // content, e.g. a certification named "HubSpot Content Marketing Certification".
+  // longer phrases are more likely content, e.g. "HubSpot Content Marketing Certification"
   if (!words.length || words.length > 3) return false;
   const properShape = words.every(w => MINOR_WORDS.has(w.toLowerCase()) || /^[A-Z]/.test(w));
   if (!properShape) return false;
@@ -44,15 +38,11 @@ function isHeadingLine(line) {
 }
 
 function normalizeResumeText(text) {
-  // Collapse 3+ consecutive spaces → single space
   text = text.replace(/ {3,}/g, " ");
+  text = text.replace(/-\s+([a-z])/g, "$1"); // rejoin soft-wrapped hyphenation: "im- prove"
 
-  // Fix soft/wrapped hyphenation: "im- prove" → "improve"
-  text = text.replace(/-\s+([a-z])/g, "$1");
-
-  // Splits a heading that got glued onto the previous line during PDF
-  // extraction. Requires 2+ spaces so it doesn't fire on ordinary text that
-  // just happens to contain one of these words, like "Master of Education".
+  // splits a heading glued onto the previous line during pdf extraction;
+  // requires 2+ spaces so it won't fire on text like "Master of Education"
   const MIDLINE_HEADING_RE = new RegExp(
     `(?<=[\\w,;.])\\s{2,}((?:Work\\s+)?Experience|Projects?|(?:Technical\\s+)?Skills|Education|Certifications?|Awards?|Achievements?|Summary|Profile|Objective|Publications?|Volunteer(?:ing)?|Interests?|References?|Languages?|Courses?|Honou?rs?|Activities)(?!\\s*,)(?!\\s*$)`,
     "gm"
@@ -93,8 +83,7 @@ function extractContactInfo(text) {
   const emailM = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   if (emailM) info.email = emailM[0];
 
-  // the leading char can be an opening paren ("(555) ...") as well as a
-  // digit or "+" — without it the paren gets left out of the match entirely.
+  // leading char can be "(" too ("(555) ..."), not just a digit or "+"
   const phoneM = text.match(/(\+?[\d(][\d\s\-().]{6,18}[\d])/);
   if (phoneM) {
     const digits = phoneM[1].replace(/\D/g, "");
@@ -107,10 +96,8 @@ function extractContactInfo(text) {
   const ghM = text.match(/github\.com\/([a-zA-Z0-9\-_%]+)/i);
   if (ghM) info.github = "https://github.com/" + ghM[1];
 
-  // stops at closing punctuation instead of swallowing it — otherwise a url
-  // written "(https://site.com)" or "[https://site.com]" (the latter is how
-  // a recovered pdf/docx hyperlink annotation gets spliced back into the
-  // text) leaks the trailing ")" or "]" into the captured value.
+  // stops at closing punctuation, or a wrapped url like "(https://site.com)"
+  // leaks the trailing ")" into the captured value
   const portM = text.match(/https?:\/\/(?!(?:www\.)?(?:linkedin|github)\.)([a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,}[^\s)\]}>"']*)/i);
   if (portM) info.portfolio = portM[0];
 
@@ -125,8 +112,7 @@ const CREDENTIAL_SUFFIX_RE = /,\s*(?:RN|LPN|NP|PA|MD|DO|DDS|DVM|PhD|EdD|JD|Esq\.
 function extractName(lines) {
   for (const line of lines.slice(0, 8)) {
     if (line.includes("@") || line.includes("http") || /^\d/.test(line)) continue;
-    // A heading ("Clinical Experience") or job title ("Associate Attorney")
-    // can look exactly like a plausible name — skip both.
+    // a heading or job title can look exactly like a plausible name
     if (isHeadingLine(line) || ROLE_KEYWORDS_RE.test(line)) continue;
 
     const candidate = line.replace(CREDENTIAL_SUFFIX_RE, "").trim();
@@ -308,8 +294,7 @@ function extractExperienceEntries(sectionLines) {
     const nextAnchorIdx = anchors[a + 1] !== undefined ? anchors[a + 1] : sectionLines.length;
     const bulletStart = Math.max(idx, ...consumed) + 1;
 
-    // The line before the next anchor might be its role/title, not our bullet —
-    // a title has no sentence-ending punctuation, unlike a real bullet.
+    // the line before the next anchor might be its role/title, not our bullet
     const boundaryIdx = nextAnchorIdx - 1;
     const boundaryLine = sectionLines[boundaryIdx] || "";
     const boundaryLooksLikeNextRole = boundaryIdx > idx && boundaryLine &&
@@ -349,12 +334,8 @@ function extractExperienceEntries(sectionLines) {
   });
 }
 
-// experience entries get a real date range pulled out via DATE_RANGE_RE;
-// projects never got the same treatment, so a trailing "2026" or "2024 –
-// Present" had nowhere to go but into the name or description. this gives
-// projects the same treatment, anchored to the end of the line — which is
-// where a project header's date actually sits — rather than searching the
-// whole line and risking a false match inside the title itself.
+// pulls a trailing date off a project line (same idea as DATE_RANGE_RE for
+// experience) so it can't leak into the name/description instead
 const TRAILING_DATE_RANGE_RE = new RegExp(`${DATE_RANGE_RE.source}\\s*$`, "i");
 const TRAILING_BARE_YEAR_RE = /\b(19|20)\d{2}\b\s*$/;
 
@@ -394,13 +375,8 @@ function parseProjectAnchor(raw, bullets) {
 
 const SENTENCE_END_RE = /[.!?:]$/;
 
-/**
- * Parse project entries from a projects section's lines. A bullet-marked
- * line starts a new bullet; a plain line starts a new project UNLESS the
- * previous line didn't end with sentence-terminal punctuation, in which
- * case it's a word-wrapped continuation of that previous line (title or
- * bullet) rather than a new project.
- */
+// a plain line starts a new project unless the previous line didn't end in
+// sentence-terminal punctuation, in which case it's a wrapped continuation
 function extractProjects(sectionLines) {
   const rawProjects = [];
   let current = null;
@@ -455,13 +431,9 @@ function categorizeSkillLabel(label) {
   return "other";
 }
 
-// well-known technologies, checked by their own identity before falling
-// back to whatever category the resume's author happened to group them
-// under. that fallback is unavoidably imprecise — grouping react under a
-// "Cloud & Tools" heading is a perfectly normal (if slightly loose) way for
-// someone to organize their own resume, but it shouldn't mean react gets
-// filed as a cloud tool. anything not on these lists still falls back to
-// the label guess, so an unfamiliar or niche tool doesn't just disappear.
+// well-known tech, checked by identity before falling back to whichever
+// category the resume's own label groups it under (react shouldn't become a
+// "cloud tool" just because it sat under a "Cloud & Tools" heading)
 const KNOWN_SKILL_IDENTITY = {
   frameworks: [
     "react", "react.js", "reactjs", "react native", "angular", "angularjs", "vue", "vue.js", "vuejs",
@@ -492,8 +464,8 @@ for (const [cat, items] of Object.entries(KNOWN_SKILL_IDENTITY)) {
   for (const item of items) SKILL_IDENTITY_LOOKUP.set(item, cat);
 }
 
-// a token often carries its own parenthetical detail ("AWS (EC2, S3)") —
-// check the bare form first, then the form with that detail stripped off.
+// checks the bare token first, then with a parenthetical detail stripped
+// (e.g. "AWS (EC2, S3)" -> "aws")
 function identityCategoryForToken(token) {
   const bare = token.toLowerCase().trim();
   if (SKILL_IDENTITY_LOOKUP.has(bare)) return SKILL_IDENTITY_LOOKUP.get(bare);
@@ -524,10 +496,8 @@ function splitSkillTokens(str) {
   return parts.map(p => p.trim()).filter(p => p.length > 0 && p.length < 60);
 }
 
-// Prefers "Label: items" lines; falls back to a flat token list under "other".
-// each item is classified by its own identity first (see
-// identityCategoryForToken) and only falls back to the group's label when
-// the item itself isn't recognized.
+// prefers "Label: items" lines; falls back to a flat token list under "other".
+// each item is classified by identity first, the group's label only as fallback.
 function extractSkillGroups(sectionLines) {
   const groups = { languages: [], frameworks: [], ml_ai: [], data: [], cloud_tools: [], other: [] };
   const LABEL_RE = /^([A-Za-z][A-Za-z /&+]{1,40}):\s*(.+)$/;
@@ -583,22 +553,14 @@ function stripDateAndGpaNoise(line) {
     .trim();
 }
 
-// "Bachelor of Arts"/"Master of Science"/"Master of Business Administration"
-// etc. are compound degree TITLES — the "of" there belongs to the degree
-// name, not to a major that follows. without accounting for this, the first
-// "of" after "Bachelor" gets mistaken for the major connector, and "Bachelor
-// of Arts in Marketing" turns into major "Arts in Marketing" instead of
-// "Marketing". this recognizes the common compound continuations so the
-// search for the *real* major connector starts after the full degree title.
+// "Bachelor of Arts"/"Master of Science" etc. are compound degree TITLES —
+// that "of" belongs to the degree name, not a major connector. recognized so
+// the major search starts after the full title, not right after "Bachelor".
 const DEGREE_COMPOUND_CONTINUATION_RE = /^\s+of\s+(?:arts|science|engineering|business\s+administration|philosophy|education|fine\s+arts|laws|technology)\b/i;
 
-// pulls the field of study out by following the degree line's own grammar —
-// "<Degree> in/of <Major>" — instead of only recognizing a major that's
-// already on a fixed keyword list. a hardcoded list can never cover every
-// field of study a resume might name, so this only falls back to it when
-// the line doesn't use a connector word at all ("B.Tech Computer Science"),
-// and even then captures just the matched span onward, not the whole line —
-// which is what previously left "major" as a verbatim duplicate of "degree".
+// follows the degree line's own grammar ("<Degree> in/of <Major>") rather
+// than only a fixed keyword list, which is kept as a fallback for phrasing
+// with no connector word at all ("B.Tech Computer Science").
 function extractMajorFromLine(line, degreeMatch) {
   if (degreeMatch) {
     let searchStart = degreeMatch.index + degreeMatch[0].length;
@@ -652,9 +614,8 @@ function extractEducationEntries(sectionLines) {
     const gpaM = line.match(GPA_RE);
     if (gpaM && !current.gpa) current.gpa = gpaM[1];
 
-    // "expected"/"present"/"current" on a degree line is a real signal that
-    // it's still in progress — stripDateAndGpaNoise throws the word away
-    // when cleaning the display text, but the fact itself is worth keeping.
+    // real signal the degree is still in progress, even though the display
+    // text has the word itself stripped out by stripDateAndGpaNoise
     if (/\bexpected\b|\bpresent\b|\bcurrent(?:ly)?\b|\bongoing\b/i.test(line)) {
       current.inProgress = true;
     }
@@ -680,13 +641,10 @@ function extractListItems(sectionLines) {
 
 const CERT_ITEM_RE = /certifi|certificate|license|credential/i;
 const AWARD_ITEM_RE = /\baward|honou?r|runner-?up|winner|medal|scholarship|top\s+\d+(?:st|nd|rd|th)?\s*(?:percentile|percent|%)|\b1st\b|\b2nd\b|\b3rd\b/i;
-// a quantified personal metric ("240+ problems solved", "500+ github
-// stars", "50+ open source contributions") is neither a formal certification
-// nor an award — it's a practice/engagement stat. without a bucket for it,
-// a binary classifier has no honest place to put it except certifications
-// by elimination, which is simply the wrong category for it. the noun
-// often isn't right next to the number ("500+ GitHub stars"), so up to two
-// filler words are allowed in between rather than requiring them adjacent.
+// a quantified personal metric ("240+ problems solved") is neither a
+// certification nor an award — without this it defaults into certifications
+// by elimination. the noun isn't always adjacent to the number ("500+ GitHub
+// stars"), so up to two filler words are allowed in between.
 const STAT_ITEM_RE = /\b\d+\+?\s*(?:[a-z]+\s+){0,2}(?:problems?|projects?|repositories|repos|contributions?|commits?|stars?|followers?|downloads?|users?|pull\s*requests?|prs?|issues?|articles?|posts?|questions?|challenges?|competitions?|hackathons?|puzzles?|katas?|exercises?|patents?|papers?|publications?|talks?|presentations?)\b/i;
 
 // For a combined "Certifications & Awards" section — classifies each item instead of duplicating it into both.
@@ -700,10 +658,8 @@ function classifyCertAwardItems(items) {
   return { certifications, awards, achievements };
 }
 
-// the same ambiguity shows up on a standalone "Achievements" heading (which
-// already gets treated as the awards section, see the section-finding
-// regex below) — a quantified stat listed there is just as likely to end
-// up mislabeled as a formal award otherwise.
+// same ambiguity on a standalone "Achievements" heading, which is already
+// treated as the awards section (see the section-finding regex below)
 function splitAwardsAndAchievements(items) {
   const awards = [], achievements = [];
   for (const item of items) {
@@ -799,9 +755,8 @@ function rankDegree(entry) {
   return best;
 }
 
-// a short, form-friendly label ("M.Tech") rather than the full degree title,
-// for building a synthesized "current role" when there's no work history to
-// draw one from directly.
+// a short label ("M.Tech") for a synthesized "current role" when there's no
+// work history to draw one from directly
 function degreeAbbrev(entry) {
   const m = DEGREE_RE.exec(entry.degree || "");
   if (m) return m[0];
@@ -844,12 +799,10 @@ function deriveFlatProfile(structured) {
       return [head, dates, bulletText].filter(Boolean).join(" — ");
     }).filter(Boolean).join(" | ");
   } else {
-    // no work history at all — a common shape for student and early-career
-    // resumes that list projects instead of jobs. a "current role/company"
-    // form field is still answerable in that case, but only when an
-    // education entry is clearly still in progress (expected/present/
-    // current) — anything less certain stays blank rather than confidently
-    // guessing a completed degree is someone's current status.
+    // no work history — common for student/early-career resumes that list
+    // projects instead of jobs. only answer current role/company when an
+    // education entry is clearly still in progress; a completed degree stays
+    // blank rather than being guessed as someone's current status.
     const activeEdu = [...(structured.education || [])]
       .filter(e => e.inProgress)
       .sort((a, b) => (parseInt(b.graduation_year, 10) || 0) - (parseInt(a.graduation_year, 10) || 0))[0];
@@ -920,13 +873,10 @@ function deriveFlatProfile(structured) {
   return flat;
 }
 
-// how much to trust each field this parser produced, based on how reliable
-// that particular extraction path tends to be — not on anything about this
-// specific resume. a regex-matched email is close to unambiguous; a derived,
-// multi-step field like "achievements" carries every upstream guess's error
-// along with it, so it starts near the bottom. this is what lets an ai pass
-// later fill in only the fields that actually need help, and what stops a
-// shaky local guess from out-ranking a better ai answer in the profile store.
+// how much to trust each field, based on how reliable that extraction path
+// tends to be — a regex email match is near-unambiguous; a multi-step derived
+// field like "achievements" carries every upstream guess's error with it.
+// lets an ai pass fill in only what actually needs help.
 function deriveFieldConfidence(structured) {
   const confidence = {
     email: 0.95, linkedin: 0.95, github: 0.95,
@@ -949,11 +899,9 @@ function deriveFieldConfidence(structured) {
     }
     confidence.work_history = 0.55;
   } else {
-    // an in-progress education entry can stand in for "current role/company"
-    // when there's no work history at all, but it's an inference, not
-    // something the resume states directly — kept below what a real
-    // experience entry would carry, so an ai pass (or the user) can still
-    // improve on it.
+    // an inferred current role/company from in-progress education is kept
+    // below what a real experience entry would carry, so ai (or the user)
+    // can still improve on it
     const hasActiveEdu = (structured.education || []).some(e => e.inProgress);
     if (hasActiveEdu) {
       confidence.current_company = 0.5;
@@ -1016,12 +964,9 @@ function arrayFieldShapeLine(key, shape) {
   return `"${key}": [{ ${fields} }]`;
 }
 
-// wraps user-provided content in a labeled block with an explicit warning
-// against treating it as instructions. this isn't just about a hostile web
-// page poisoning a profile field — a resume file itself is untrusted input
-// (prompt-injected resumes aimed at ai screening tools are a documented
-// technique), so anything from either source gets the same fence before it
-// reaches a model.
+// wraps user-provided content in a labeled block with an explicit warning not
+// to treat it as instructions — covers both a poisoned profile field and a
+// resume file itself deliberately crafted to manipulate an ai reader.
 function fenceUntrustedData(label, text) {
   return [
     `<untrusted-${label}>`,
@@ -1034,10 +979,9 @@ function fenceUntrustedData(label, text) {
   ].join("\n");
 }
 
-// only asks the model for what the local parser is actually unsure about,
-// instead of re-running the whole schema over the whole resume every time —
-// cheaper, less to hallucinate about, and if nothing came out weak this
-// returns null so the caller can skip the ai call entirely.
+// only asks for fields the local parser is unsure about, instead of
+// re-running the whole schema every time; returns null if nothing is weak,
+// so the caller can skip the ai call entirely.
 function buildSelectiveAIPrompt(normalizedText, structured, confidence, threshold = 0.65) {
   const weakScalars = SCALAR_AI_KEYS.filter(k => !structured[k] || (confidence[k] || 0) < threshold);
   const weakArrayKeys = Object.keys(ARRAY_AI_SHAPES).filter(k => {

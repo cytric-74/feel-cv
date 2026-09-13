@@ -1,15 +1,8 @@
-// not loaded by the extension — manifest.json and popup.html never
-// reference this file. it exists only so someone can open popup.html
-// directly in a plain browser tab (outside the extension) to look at the ui
-// without wiring up real chrome.storage/chrome.runtime. to use it, add
-// <script src="dev_preview_shim.js"></script> to popup.html yourself, above
-// the field_registry.js tag, and remove it again before shipping.
-//
-// it used to live inline at the top of popup.js and activate automatically
-// whenever chrome.storage was missing — which meant a real install hitting
-// that condition (a chrome bug, a misconfigured manifest) would silently
-// show this fabricated "John Doe" profile instead of a visible error. moving
-// it here and requiring a deliberate opt-in closes that off.
+// not loaded by the extension — add <script src="dev_preview_shim.js"></script>
+// to popup.html yourself (above field_registry.js) to preview the ui in a
+// plain browser tab without real chrome.storage/chrome.runtime. remove before
+// shipping. deliberately opt-in so a real install can't silently fall back
+// to this fake profile instead of a visible error.
 
 "use strict";
 

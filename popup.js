@@ -1,6 +1,6 @@
 "use strict";
 
-// Fallback if field_registry.js fails to load — just enough to not crash.
+// fallback if field_registry.js fails to load
 const FIELD_REGISTRY = window.FCV_FIELD_REGISTRY || {
   full_name: { label: "Full Name", patterns: ["full name", "your name", "applicant name"] },
   first_name: { label: "First Name", patterns: ["first name", "given name", "forename"] },
@@ -14,13 +14,8 @@ const AI_GENERATED_FIELDS = new Set(["cover_letter", "motivation", "strengths", 
 
 const getProfile = async () => window.FCV_profileStore.getFlat(await window.FCV_profileStore.load());
 
-// the parser tells us per-field how much to trust what it found (a regex
-// email match vs. a derived, multi-step field like "achievements" aren't
-// equally reliable) — that's what the resolver actually compares against, so
-// an ai pass can only out-rank a field the local parser was already unsure
-// about, never one it was confident in. ai confidence sits at a flat, modest
-// level: enough to fill a genuine gap, never enough to overrule a strong
-// local extraction on its own.
+// per-field confidence is what the resolver compares against, so an ai pass
+// can only out-rank a field the parser was unsure about, never a confident one
 function fieldsToRecords(flat, source, confidenceMap = {}) {
   const records = {};
   for (const [key, value] of Object.entries(flat)) {
@@ -69,13 +64,8 @@ async function extractTextFromFile(file) {
   return normalizeResumeText(raw);
 }
 
-// a genuine two-column resume (sidebar + main content) has most of its rows
-// sitting entirely on one side of a consistent vertical gutter; an ordinary
-// single-column resume with the occasional right-aligned date doesn't — a
-// date shows up on a handful of rows, not most of them. this only reports a
-// split when the gap is wide, roughly centered, and recurs across a large
-// share of the page's rows, so it stays a no-op on the common single-column
-// case rather than risk slicing a page that was never in two columns.
+// only reports a split when the gap is wide, centered, and recurs across most
+// rows — a single-column resume's occasional right-aligned date won't trigger it
 function detectColumnSplit(rows, pageWidth) {
   if (!pageWidth || rows.length < 6) return null;
 
@@ -96,11 +86,8 @@ function detectColumnSplit(rows, pageWidth) {
   return splitX;
 }
 
-// a link annotation's own url is trusted as-is except for two normalizations
-// shared by both the pdf and docx recovery paths: a mailto: link becomes
-// just the email address, and a bare domain with no scheme ("www.foo.com",
-// which some editors store links as) gets "https://" added so the portfolio
-// regex — which requires a scheme — actually has something to match.
+// shared by the pdf and docx link-recovery paths: mailto: becomes a bare
+// address, and a schemeless domain gets "https://" added
 function normalizeLinkUrl(rawUrl) {
   const trimmed = (rawUrl || "").trim();
   if (!trimmed) return "";
@@ -128,8 +115,7 @@ async function extractPDF(file) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
 
-    // PDF.js gives text in stream order, not reading order. Group into lines
-    // by Y position (with tolerance for jitter), then sort each line by X.
+    // pdf.js gives text in stream order; group into lines by Y, sort by X
     const Y_TOLERANCE = 2;
     const lineMap = new Map(); // quantised-Y → [{ x, str }]
 
@@ -152,16 +138,13 @@ async function extractPDF(file) {
       lineMap.get(bucketKey).push({ x, str: item.str });
     }
 
-    // PDF Y grows upward, so sort descending to get top-to-bottom order.
+    // pdf Y grows upward, so sort descending for top-to-bottom order
     const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
     const rows = sortedYs.map(y => ({ y, items: lineMap.get(y) }));
 
-    // a clickable "GitHub"/"LinkedIn"/"Portfolio" label carries its real url
-    // in the pdf's link-annotation layer, not in the text stream above — so
-    // no regex over that text will ever find it. splicing the actual url in
-    // next to the row it visually sits on means the existing contact-info
-    // regexes in resume_parser.js just find it naturally, with no separate
-    // annotation-handling path needed downstream.
+    // a clickable label's real url lives in the pdf's link-annotation layer,
+    // not the text stream — splice it into the row it visually sits on so
+    // resume_parser.js's contact-info regexes find it naturally
     try {
       const linkAnnotations = (await page.getAnnotations())
         .filter(a => a.subtype === "Link" && a.url && Array.isArray(a.rect));
@@ -179,10 +162,9 @@ async function extractPDF(file) {
           if (dist < nearestDist) { nearestDist = dist; nearestRow = row; }
         }
 
-        // an annotation's rect is centered on the glyph bounds, not the text
-        // baseline the rows above are keyed by, so it needs a looser
-        // tolerance than same-line jitter does — but still tied to it rather
-        // than an unrelated magic number.
+        // an annotation's rect centers on glyph bounds, not the text baseline,
+        // so it needs a looser tolerance than same-line jitter — tied to it
+        // rather than an unrelated magic number
         const LINK_ROW_TOLERANCE = Y_TOLERANCE * 3;
         if (nearestRow && nearestDist <= LINK_ROW_TOLERANCE) {
           nearestRow.items.push({ x: linkX + 0.01, str: `[${displayUrl}]` });
@@ -202,9 +184,8 @@ async function extractPDF(file) {
         return items.map(it => it.str).join(" ").trim();
       }).filter(Boolean);
     } else {
-      // read the left column fully, top to bottom, then the right column —
-      // instead of merging both at each shared vertical position, which is
-      // what produces gibberish out of a sidebar + main-content layout.
+      // read the left column fully, then the right — merging both at each
+      // shared vertical position is what produces gibberish otherwise
       const leftLines = [], rightLines = [];
       for (const row of rows) {
         const left = row.items.filter(it => it.x < splitX).sort((a, b) => a.x - b.x).map(it => it.str).join(" ").trim();
@@ -221,11 +202,8 @@ async function extractPDF(file) {
   return normalizeResumeText(pageTexts.join("\n"));
 }
 
-// extractRawText() throws hyperlinks away entirely, the same way a naive pdf
-// text dump does — convertToHtml() keeps them as real <a href> elements, so
-// they can be recovered the same way the pdf path recovers them: splice the
-// target next to the visible label before flattening to plain text, and let
-// the existing contact-info regexes in resume_parser.js do the rest.
+// extractRawText() throws hyperlinks away; convertToHtml() keeps them as
+// real <a href> elements so they can be recovered the same way as the pdf path
 async function extractDOCX(file) {
   if (!window.mammoth) throw new Error("mammoth not loaded");
   const ab = await file.arrayBuffer();
@@ -255,17 +233,10 @@ function htmlToTextWithLinks(html) {
   return decodeHtmlEntities(text);
 }
 
-// Structured parsing and AI prompt/merge logic live in resume_parser.js.
-// contact details aren't stripped here anymore — every prompt built by this
-// function passes through the privacy gateway before it can reach a cloud
-// provider, so redaction happens in exactly one place instead of twice.
-//
-// the profile data itself is fenced before it's interpolated in, because a
-// value in it isn't guaranteed to be inert text — it could have come from a
-// field a hostile page tricked the user into typing, or from a resume file
-// that was itself crafted to manipulate an ai reader. fencing means even a
-// poisoned field can't act as an instruction to the model that generates
-// the user's cover letters and summaries.
+// contact details aren't stripped here — every prompt passes through the
+// privacy gateway before reaching a cloud provider, so redaction happens in
+// one place. profile data is fenced since a field's value isn't guaranteed
+// to be inert text (a poisoned field, or a resume crafted to manipulate an ai).
 function buildPrompt(fieldKey, profile, jobTitle, company, structured) {
   const context = (structured && Object.keys(structured).length) ? structured : profile;
   const p = window.FCV_fenceUntrustedData("profile-data", JSON.stringify(context));
@@ -282,8 +253,7 @@ function buildPrompt(fieldKey, profile, jobTitle, company, structured) {
   return prompts[fieldKey] || `Generate a short answer for the field "${fieldKey}" from the following profile data. ${guard} Output only the answer.\n\n${p}`;
 }
 
-// turns an arbitrary url into the origin pattern chrome's permission apis
-// expect, e.g. "http://localhost:11434/api/tags" -> "http://localhost/*".
+// e.g. "http://localhost:11434/api/tags" -> "http://localhost/*"
 function originPatternFromUrl(url) {
   try {
     const u = new URL(url);
@@ -294,12 +264,8 @@ function originPatternFromUrl(url) {
   }
 }
 
-// the manifest only pre-grants a handful of known hosts (localhost, the
-// built-in providers). anything else — a custom ollama address, someone's
-// own openai-compatible endpoint — gets asked for here, right before the
-// request that needs it, instead of the extension asking for the whole web
-// up front. in the dev preview shim there's no permissions api at all, so
-// this just gets out of the way.
+// anything beyond the manifest's pre-granted hosts (a custom ollama address,
+// a custom api endpoint) is asked for here, right before the request needs it
 async function ensureHostAccess(url) {
   if (!chrome.permissions) return true;
   const pattern = originPatternFromUrl(url);
@@ -358,8 +324,7 @@ async function callOpenAICompat(prompt, cfg) {
   return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
-// shows the redacted payload and waits for the user to send or cancel.
-// resolves to { send, skipNextTime } — never rejects.
+// resolves to { send, skipNextTime } — never rejects
 function showCloudPreviewModal(text) {
   return new Promise((resolve) => {
     const overlay = document.getElementById("privacy-modal-overlay");
@@ -387,9 +352,8 @@ function showCloudPreviewModal(text) {
   });
 }
 
-// the only path any prompt can take to a cloud provider. a local (ollama)
-// call passes straight through untouched — nothing about it ever leaves the
-// device, so there's nothing to redact or ask permission for.
+// the only path a prompt can take to a cloud provider; a local ollama call
+// passes straight through since nothing about it leaves the device
 async function requestCloudSend(promptText, cfg) {
   if (!window.FCV_privacyGateway.isCloudProvider(cfg)) return promptText;
 
@@ -532,11 +496,8 @@ async function updateProfileStats(profile) {
   const specProvider = document.getElementById("spec-provider");
   const specModel = document.getElementById("spec-model");
   const specApi = document.getElementById("spec-api");
-  // this reads the same resolved "is this actually leaving the device"
-  // check the privacy gateway itself gates on — so the badge can never claim
-  // "local" while the gateway is quietly treating the request as cloud, or
-  // vice versa. previously this just checked cfg.provider, which agreed with
-  // reality right up until someone pointed the ollama url anywhere else.
+  // reads the same check the privacy gateway itself gates on, so the badge
+  // can't claim "local" while the gateway treats the request as cloud
   const isCloudEgress = window.FCV_privacyGateway.isCloudProvider(cfg);
 
   if (specProvider) {
@@ -602,11 +563,8 @@ function closeModal() {
   $("modal-overlay").classList.add("hidden");
 }
 
-// several fields "learned" in a fast burst on the same page is flagged by
-// content.js as suspicious (it's how a script looping over fields looks, not
-// how a person fills out a form) — shown here as a visibly different, more
-// skeptical prompt rather than silently dropped, since a fast legitimate
-// multi-field paste is possible too and shouldn't just vanish.
+// content.js flags a fast burst of learned fields as suspicious; shown here
+// as a more skeptical prompt rather than silently dropped
 function showLearnBanner(key, value, fieldLabel, suspicious) {
   const banner = el("div", { className: "learn-banner" + (suspicious ? " suspicious" : "") }, [
     el("span", { textContent: suspicious ? `⚠ Unusual: learn "${fieldLabel}"?` : `💡 Learn "${fieldLabel}"?` }),
@@ -828,9 +786,8 @@ function siteScriptId(pattern) {
   return "fcv-dynamic-" + pattern.replace(/[^a-z0-9]/gi, "_");
 }
 
-// a bare-bones match-pattern test — good enough for the simple "*://x/*"
-// shapes we generate and the ones declared in manifest.json, not meant as a
-// general implementation of chrome's full match-pattern spec.
+// good enough for the simple "*://x/*" shapes we generate and declare —
+// not a general implementation of chrome's full match-pattern spec
 function matchesPattern(pattern, url) {
   const re = new RegExp("^" + pattern.split("*").map(s => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$");
   return re.test(url);
@@ -841,10 +798,8 @@ function isStaticallyInjected(url) {
   return scripts.some(cs => (cs.matches || []).some(pattern => matchesPattern(pattern, url)));
 }
 
-// known ats domains are already covered by the static content_scripts entry
-// in manifest.json — that grant is baked into the manifest and can't be
-// revoked at runtime, so this banner only ever offers enable/disable for
-// sites outside that list.
+// known ats domains are already covered by manifest.json's static list and
+// can't be revoked at runtime — this only offers enable/disable elsewhere
 async function refreshSiteAccessBanner() {
   const banner = document.getElementById("site-access-banner");
   const valueEl = document.getElementById("site-access-value");
@@ -947,9 +902,7 @@ function switchTab(tabId) {
   if (tabId === "tab-settings") renderSettings();
 }
 
-// sends an already-built extraction prompt to the ai and returns its parsed
-// json response. the prompt itself is built by the caller (FCV_buildSelectiveAIPrompt)
-// so only the fields the local parser was unsure about get asked for.
+// sends an already-built extraction prompt and returns its parsed json response
 async function sendAIParsePrompt(rawPrompt) {
   const cfg = await getProviderConfig();
   const prompt = await requestCloudSend(rawPrompt, cfg);
@@ -1009,9 +962,7 @@ async function init() {
         await renderProfileView(window.FCV_profileStore.getFlat(store));
         status(summarizeChanges(changes, "resume") + " connect ai for deeper enrichment.", "#FF8030");
 
-        // ask the ai for only what the local parser was unsure about — if
-        // nothing came out weak, there's nothing to gain from a cloud call
-        // at all, so this skips it rather than re-parsing everything again.
+        // ask ai only for what came out weak; skip the call if nothing did
         try {
           const cfg = await getProviderConfig();
           const isOllama = cfg.provider === "ollama";

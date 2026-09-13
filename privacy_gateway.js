@@ -1,7 +1,6 @@
-// the one place that decides what leaves the device. nothing should call a
-// cloud ai endpoint directly with a raw prompt — it goes through here first,
-// gets its contact details stripped, and (unless the user has already said
-// not to bother) gets shown to the user before it actually goes out.
+// the one place that decides what leaves the device: every cloud ai prompt
+// gets its contact details stripped and (unless the user opted out) previewed
+// before it goes out.
 
 "use strict";
 
@@ -11,9 +10,6 @@ const fcvGithubRe = /https?:\/\/(www\.)?github\.com\/[^\s)"']+/gi;
 const fcvGenericUrlRe = /https?:\/\/[^\s)"']+/gi;
 const fcvPhoneRe = /(\+?[\d][\d\s\-().]{6,18}[\d])/g;
 
-// same fields the profile store already trusts more from local extraction
-// than from an ai pass — those are exactly the ones that don't need to make
-// the trip to a cloud provider at all.
 function fcvRedact(text) {
   if (!text) return { text: text || "", count: 0 };
   let count = 0;
@@ -35,11 +31,9 @@ function fcvRedact(text) {
 
 const fcvLoopbackHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
-// what actually decides whether data leaves the device is where the request
-// is actually going, not which radio button is selected in settings. an
-// "ollama" provider pointed at a non-loopback address — a typo, a scam
-// support script, a bad settings import — is just as much a network egress
-// as picking "external api" outright, so it gets treated the same way.
+// what decides whether data leaves the device is where the request actually
+// goes, not which provider is selected — "ollama" pointed at a non-loopback
+// address is just as much a network egress as "external api"
 function fcvResolvesToLoopback(url) {
   try {
     return fcvLoopbackHostnames.has(new URL(url).hostname);

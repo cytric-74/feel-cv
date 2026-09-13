@@ -1,7 +1,5 @@
-# download_libs.ps1
-# downloads the vendored pdf/docx parsing libraries and verifies each one
-# against vendor_libs.lock.json — the single source of truth for exactly
-# which build of each file this extension ships.
+# downloads the vendored pdf/docx libraries and verifies each against
+# vendor_libs.lock.json, the source of truth for which build ships.
 
 $lock = Get-Content -Raw -Path (Join-Path $PSScriptRoot "vendor_libs.lock.json") | ConvertFrom-Json
 $anyMismatch = $false
