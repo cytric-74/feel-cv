@@ -86,12 +86,28 @@
     "how did you hear", "linkedin", "github", "portfolio"
   ];
 
+  // rejecting only the current viewport would also flag ordinary
+  // below-the-fold fields in any normal multi-screen form, so this checks
+  // against the full scrollable document instead — legitimate content is
+  // somewhere inside that area; a field parked at left:-9999px to hide it
+  // from autofill-harvesting scripts is not.
   function isVisible(el) {
     if (!el || el.disabled) return false;
     const style = window.getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) return false;
+
     const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
+    if (rect.width <= 0 || rect.height <= 0) return false;
+
+    const docW = Math.max(document.documentElement.scrollWidth, window.innerWidth);
+    const docH = Math.max(document.documentElement.scrollHeight, window.innerHeight);
+    const absLeft = rect.left + window.scrollX;
+    const absTop = rect.top + window.scrollY;
+    const OFFSCREEN_MARGIN = 50;
+    if (absLeft + rect.width < -OFFSCREEN_MARGIN || absLeft > docW + OFFSCREEN_MARGIN) return false;
+    if (absTop + rect.height < -OFFSCREEN_MARGIN || absTop > docH + OFFSCREEN_MARGIN) return false;
+
+    return true;
   }
 
   // returns the first candidate found, checked in order of how reliable that
@@ -356,42 +372,130 @@
     return { fields, toFill, alreadyFilled, skippedByPolicy };
   }
 
-  // empty fields are always included; already-filled ones only get touched
-  // when the user explicitly opted into overwriting them.
-  function applyAutofill(plan, profile, overwrite) {
+  // hit-tests the field at its own on-screen center point. a field an
+  // attacker parked off-canvas or tucked under an overlay either isn't
+  // there once we've scrolled to it, or something else answers the hit-test
+  // instead of the field itself — either way, it doesn't get filled.
+  function isCoveredOrHidden(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return true;
+
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    if (cx < 0 || cy < 0 || cx >= window.innerWidth || cy >= window.innerHeight) return true;
+
+    const topEl = document.elementFromPoint(cx, cy);
+    if (!topEl) return true;
+    return !(topEl === el || el.contains(topEl) || topEl.contains(el));
+  }
+
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  const SPOTLIGHT_DELAY_MS = 180;
+  let autofillCancelled = false;
+
+  // walks the page field by field instead of filling everything at once out
+  // of sight — each target gets scrolled into view, hit-tested right there,
+  // and only then filled. a hidden decoy field either becomes visibly wrong
+  // once it's on screen, or fails the hit-test and gets skipped outright.
+  // empty fields are always included; already-filled ones only when the
+  // user explicitly opted into overwriting them.
+  async function applyAutofill(plan, profile, overwrite, onProgress) {
     const targets = overwrite ? [...plan.toFill, ...plan.alreadyFilled] : plan.toFill;
     let filled = 0;
+    const blocked = [];
 
-    for (const { element, key } of targets) {
+    for (let i = 0; i < targets.length; i++) {
+      if (autofillCancelled) break;
+
+      const { element, key } = targets[i];
       const value = profile[key];
-      if (value && fillElement(element, value)) {
-        element.style.transition = "box-shadow 0.4s";
-        element.style.boxShadow  = "0 0 0 2px #fdb14c";
-        setTimeout(() => { element.style.boxShadow = ""; }, 2000);
-        filled++;
+      if (!value) continue;
+
+      element.scrollIntoView({ block: "center", inline: "nearest" });
+      await wait(SPOTLIGHT_DELAY_MS);
+      if (autofillCancelled) break;
+
+      if (isCoveredOrHidden(element)) {
+        blocked.push(key);
+        continue;
       }
+
+      element.classList.add("fcv-spotlight");
+      if (onProgress) onProgress({ index: i, total: targets.length, key });
+
+      if (fillElement(element, value)) filled++;
+
+      await wait(SPOTLIGHT_DELAY_MS);
+      element.classList.remove("fcv-spotlight");
+      element.style.transition = "box-shadow 0.4s";
+      element.style.boxShadow  = "0 0 0 2px #fdb14c";
+      setTimeout(() => { element.style.boxShadow = ""; }, 2000);
     }
 
-    return { filled, total: plan.fields.length };
+    return { filled, total: plan.fields.length, blocked };
   }
 
   // ── Learning from fields the user fills in manually ──────────────────────────
+  // a page's own script can set el.value and dispatch a synthetic change/blur
+  // just as easily as a real keystroke can — nothing about the event itself
+  // tells them apart unless something checks. this section makes two things
+  // true before a value is ever proposed for saving: the event that fired
+  // must be genuinely user-generated, and it must follow a genuine focus or
+  // pointerdown on that same field a moment earlier — a script can dispatch
+  // one fake event, but it can't fake the browser's own isTrusted flag, and
+  // it can't manufacture the interaction history a real edit leaves behind.
 
   const watchedFields = new Map(); // element → key
+  const trustedInteractionAt = new WeakMap(); // element → timestamp of its last genuine focus/pointerdown
+  const TRUSTED_INTERACTION_WINDOW_MS = 60000;
+
+  function markTrustedInteraction(e) {
+    if (!e.isTrusted) return;
+    trustedInteractionAt.set(e.target, Date.now());
+  }
+
+  // a burst of several fields "learned" within a couple seconds of each
+  // other isn't how a person fills out a form — it's how a script looping
+  // over fields looks. isTrusted already blocks a lone forged event outright;
+  // this is a softer, second layer for anything unusual enough to be worth a
+  // more skeptical look, surfaced as a visibly different prompt rather than
+  // silently dropped, since a fast legitimate multi-field paste is possible too.
+  const recentLearnTimestamps = [];
+  const BURST_WINDOW_MS = 2000;
+  const BURST_THRESHOLD = 3;
+
+  function noteLearnEventAndCheckBurst() {
+    const now = Date.now();
+    recentLearnTimestamps.push(now);
+    while (recentLearnTimestamps.length && now - recentLearnTimestamps[0] > BURST_WINDOW_MS) {
+      recentLearnTimestamps.shift();
+    }
+    return recentLearnTimestamps.length >= BURST_THRESHOLD;
+  }
 
   function watchForLearning(fields) {
     for (const { element, key } of fields) {
       if (SKIP_LEARNING.has(key)) continue;
       watchedFields.set(element, key);
+      element.addEventListener("focus", markTrustedInteraction);
+      element.addEventListener("pointerdown", markTrustedInteraction);
       element.addEventListener("change", onFieldChange);
       element.addEventListener("blur",   onFieldChange);
     }
   }
 
   async function onFieldChange(e) {
+    if (!e.isTrusted) return; // a script dispatched this — it isn't the user typing
+
     const el  = e.target;
     const key = watchedFields.get(el);
     if (!key || !el.value.trim()) return;
+
+    const lastInteraction = trustedInteractionAt.get(el);
+    if (!lastInteraction || (Date.now() - lastInteraction) > TRUSTED_INTERACTION_WINDOW_MS) return;
 
     const stored = await getProfile();
     const newVal = el.value.trim();
@@ -404,7 +508,8 @@
       type: "NEW_FIELD_LEARNED",
       key,
       value: newVal,
-      fieldLabel: FIELD_REGISTRY[key]?.label || key
+      fieldLabel: FIELD_REGISTRY[key]?.label || key,
+      suspicious: noteLearnEventAndCheckBurst(),
     });
   }
 
@@ -426,6 +531,9 @@
   function resetBannerState() {
     banner = null; textSpan = null; fillBtn = null; overwriteRow = null; overwriteBox = null;
     bannerShown = false; pendingPlan = null; pendingProfile = null;
+    // autofillCancelled is deliberately not reset here — a run in progress
+    // needs to see it stay true until its loop actually notices and stops.
+    // it gets re-armed in presentPlan(), right before the next run starts.
   }
 
   function planSummaryText(plan) {
@@ -437,6 +545,7 @@
   function presentPlan(profile) {
     ensureBanner();
     bannerShown = true;
+    autofillCancelled = false;
 
     if (!Object.keys(profile).length) {
       textSpan.textContent = "No profile found. Upload your resume first.";
@@ -470,18 +579,31 @@
     }
   }
 
-  function commitPlan() {
+  async function commitPlan() {
     const overwrite = !!(overwriteBox && overwriteBox.checked);
-    const result = applyAutofill(pendingPlan, pendingProfile, overwrite);
-    watchForLearning(pendingPlan.fields);
+    const plan = pendingPlan, profile = pendingProfile;
+    fillBtn.disabled = true;
 
-    textSpan.textContent = `Filled ${result.filled} of ${result.total} fields`;
+    const result = await applyAutofill(plan, profile, overwrite, ({ key, index, total }) => {
+      if (!textSpan) return; // banner was closed mid-walk
+      const label = FIELD_REGISTRY[key]?.label || key;
+      textSpan.textContent = `Filling ${label}… (${index + 1}/${total})`;
+    });
+
+    if (autofillCancelled) return; // banner is already gone; nothing left to update
+
+    watchForLearning(plan.fields);
+
+    textSpan.textContent = result.blocked.length
+      ? `Filled ${result.filled} of ${result.total} fields — ${result.blocked.length} skipped (looked hidden or covered)`
+      : `Filled ${result.filled} of ${result.total} fields`;
     fillBtn.textContent = "Autofill";
+    fillBtn.disabled = false;
     if (overwriteRow) { overwriteRow.remove(); overwriteRow = null; overwriteBox = null; }
     pendingPlan = null;
 
-    chrome.runtime.sendMessage({ type: "AUTOFILL_DONE", filled: result.filled, total: result.total });
-    setTimeout(() => { if (banner) banner.remove(); resetBannerState(); }, 3000);
+    chrome.runtime.sendMessage({ type: "AUTOFILL_DONE", filled: result.filled, total: result.total, blocked: result.blocked.length });
+    setTimeout(() => { if (banner) banner.remove(); resetBannerState(); }, 3500);
   }
 
   function onFillButtonClick() {
@@ -519,7 +641,7 @@
 
     document.body.appendChild(banner);
 
-    closeBtn.onclick = () => { banner.remove(); resetBannerState(); };
+    closeBtn.onclick = () => { autofillCancelled = true; banner.remove(); resetBannerState(); };
     fillBtn.onclick = onFillButtonClick;
 
     return banner;

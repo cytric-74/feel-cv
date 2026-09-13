@@ -77,3 +77,19 @@
   color: #999;
   cursor: pointer;
 }
+
+#fcv-banner .fcv-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* applied to the field currently being walked through during autofill —
+   deliberately more attention-grabbing than the brief "just filled" glow,
+   since the point here is to make sure a human actually sees this field
+   before real data lands in it. */
+.fcv-spotlight {
+  outline: 3px solid #fdb14c !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(253, 177, 76, 0.35) !important;
+  transition: outline-color 0.15s ease, box-shadow 0.15s ease;
+}

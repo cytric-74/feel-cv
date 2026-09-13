@@ -33,13 +33,30 @@ function fcvRedact(text) {
   return { text: out, count };
 }
 
-// ollama runs on the user's own machine, so a prompt sent there never leaves
-// the device — only the openai-compatible path is a real network egress.
+const fcvLoopbackHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+// what actually decides whether data leaves the device is where the request
+// is actually going, not which radio button is selected in settings. an
+// "ollama" provider pointed at a non-loopback address — a typo, a scam
+// support script, a bad settings import — is just as much a network egress
+// as picking "external api" outright, so it gets treated the same way.
+function fcvResolvesToLoopback(url) {
+  try {
+    return fcvLoopbackHostnames.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function fcvIsCloudProvider(cfg) {
-  return !!cfg && cfg.provider === "openai_compat";
+  if (!cfg) return false;
+  if (cfg.provider === "openai_compat") return true;
+  if (cfg.provider === "ollama") return !fcvResolvesToLoopback(cfg.ollamaUrl);
+  return false;
 }
 
 window.FCV_privacyGateway = {
   redact: fcvRedact,
   isCloudProvider: fcvIsCloudProvider,
+  resolvesToLoopback: fcvResolvesToLoopback,
 };
